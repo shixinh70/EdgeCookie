@@ -16,6 +16,7 @@
  */
 
 
+
 struct global_data {
 	int action;
 	int double_macswap;
@@ -50,7 +51,6 @@ SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 	void *data = (void *)(long)ctx->data;
 	void *data_end = (void *)(long)ctx->data_end;
 	int zero = 0;
-
 	struct xdp_cpu_stats *stats = bpf_map_lookup_elem(&xdp_stats, &zero);
 	if (!stats) {
 		return XDP_ABORTED;
@@ -73,9 +73,12 @@ SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 		}
 		
 		if(ip->protocol == IPPROTO_TCP){
+
+			
 			if(ctx->ingress_ifindex == RETH1)
 				return bpf_redirect_map(&xsks, 0, XDP_PASS);
 			else if (ctx->ingress_ifindex == RETH2)
+				//return XDP_PASS;
 				return bpf_redirect_map(&xsks, 1, XDP_PASS);
 		}
 	}

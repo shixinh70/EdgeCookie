@@ -31,7 +31,7 @@ __u64 reth2_mac = 0x020013ac4202;
 	printf(fmt, ##__VA_ARGS__)
 #define RETH1 0
 #define RETH2 1
-#define TS_START 0x00000020
+#define TS_START bpf_ntohl(0x01010000)
 
 
 #define PERF 1
@@ -117,9 +117,6 @@ u128 rc[40];
   *(u64*)(out + 24) = (u64*)(s3)[0];
 
 void load_constants();
-
-
-
 
 const uint64_t syn_1_mask = 0x0008000400000002;
 const uint64_t syn_2_mask_1 = 0x0000070100000002;

@@ -16,7 +16,7 @@ LIBBPF_INCLUDE_DIR := $(LIBBPF_DIR)/root/usr/include
 
 # Allows to pass additional cflags from the make command
 override CFLAGS += -I./src -I./headers -I$(LIBXDP_INCLUDE_DIR) \
-				   -I$(LIBBPF_INCLUDE_DIR) lxsknf-O3 -flto -march=native  -fomit-frame-pointer
+				   -I$(LIBBPF_INCLUDE_DIR) -O3 -flto -march=native  -fomit-frame-pointer
 
 # Configure library paths
 XSKNF_DIR    := ./src
@@ -26,6 +26,8 @@ XSKNF_O      := ${XSKNF_C:.c=.o}
 XSKNF_TARGET := $(XSKNF_DIR)/libxsknf.a
 
 EXAMPLES := macswap/macswap				\
+			macswap/server_in			\
+			macswap/server_en			\
 			# firewall/firewall 			\
 			# load_balancer/load_balancer	\
 			# checksummer/checksummer		\
@@ -49,9 +51,9 @@ update_submodules:
 	git submodule update --init --recursive
 
 clean:
-	$(MAKE) -C ./xdp-tools clean
-	$(RM) $(XSKNF_O)
-	$(RM) $(XSKNF_TARGET)
+	# $(MAKE) -C ./xdp-tools clean
+	# $(RM) $(XSKNF_O)
+	# $(RM) $(XSKNF_TARGET)
 	$(RM) $(EXAMPLES_USER)
 	$(RM) $(EXAMPLES_TARGETS)
 	$(RM) $(EXAMPLES_KERN)
