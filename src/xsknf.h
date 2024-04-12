@@ -15,7 +15,6 @@ extern "C" {
 #define MODE_AF_XDP 0x1
 #define MODE_XDP 0x2
 #define MODE_COMBINED (MODE_AF_XDP | MODE_XDP)
-
 /* 
  * Custom packet processing function defined by the user.
  * Returns the ifindex toward which redirect the packet or -1 to drop it

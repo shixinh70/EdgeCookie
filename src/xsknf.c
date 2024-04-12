@@ -34,14 +34,15 @@
  */
 #define FRAMES_PER_SOCKET_SHIFT 12
 #define FRAMES_PER_SOCKET (1 << FRAMES_PER_SOCKET_SHIFT)  // 4096
-
 #define DEFAULT_BIND_FLAGS (XDP_USE_NEED_WAKEUP)
-
 #define POLL_TIMEOUT_MS 1000
+int total_duration = 0;
+
 
 static size_t umem_bufsize;
 static int stop_workers = 0;
 static struct xsknf_config conf;
+
 static struct xsknf_config default_conf = {
 	.working_mode = MODE_AF_XDP,
 	.xsk_frame_size = XSK_UMEM__DEFAULT_FRAME_SIZE,
@@ -509,6 +510,7 @@ static void process_batch(struct xsk_socket_info *xsks, unsigned ifindex)
 		addr = xsk_umem__add_offset_to_addr(addr);
 		void *pkt = xsk_umem__get_data(rx_xsk->buffer, addr);
 
+		
 		ret = xsknf_packet_processor(pkt, &len, ifindex);
 		if (ret == -1) {
 			/* Enqueue to drop queue */

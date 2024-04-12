@@ -14,9 +14,19 @@ LIBBPF_SOURCES = $(wildcard $(LIBBPF_DIR)/*.[ch])
 OBJECT_LIBBPF := $(LIBBPF_DIR)/libbpf.a
 LIBBPF_INCLUDE_DIR := $(LIBBPF_DIR)/root/usr/include
 
+# LIBXDP_DIR := ./xdp-tools/lib/libxdp
+# LIBXDP_SOURCES := $(wildcard ./xdp-tools/lib/libxdp/*.c ./xdp-tools/lib/libxdp/*.h ./xdp-tools/lib/libxdp/*.in)
+# OBJECT_LIBXDP := ./xdp-tools/lib/libxdp/libxdp.a
+# LIBXDP_INCLUDE_DIR := ./xdp-tools/headers
+# LIBBPF_DIR := ./xdp-tools/lib/libbpf/src
+# LIBBPF_SOURCES := $(wildcard ./xdp-tools/lib/libbpf/src/*.c ./xdp-tools/lib/libbpf/src/*.h)
+# OBJECT_LIBBPF := ./xdp-tools/lib/libbpf/src/libbpf.a
+# LIBBPF_INCLUDE_DIR := ./xdp-tools/lib/libbpf/src/root/usr/include
+
+
 # Allows to pass additional cflags from the make command
 override CFLAGS += -I./src -I./headers -I$(LIBXDP_INCLUDE_DIR) \
-				   -I$(LIBBPF_INCLUDE_DIR) -O3 -flto -march=native  -fomit-frame-pointer
+				   -I$(LIBBPF_INCLUDE_DIR) -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer
 
 # Configure library paths
 XSKNF_DIR    := ./src
@@ -25,9 +35,9 @@ XSKNF_C      := $(XSKNF_DIR)/xsknf.c
 XSKNF_O      := ${XSKNF_C:.c=.o}
 XSKNF_TARGET := $(XSKNF_DIR)/libxsknf.a
 
-EXAMPLES := macswap/macswap				\
-			macswap/server_in			\
-			macswap/server_en			\
+EXAMPLES := agent/agent			\
+			agent/server_in			\
+			agent/server_en			\
 			# firewall/firewall 			\
 			# load_balancer/load_balancer	\
 			# checksummer/checksummer		\
@@ -41,11 +51,25 @@ EXAMPLES_LD      := -L./src/ -lxsknf -L$(LIBXDP_DIR) -l:libxdp.a \
 					-L$(LIBBPF_DIR) -l:libbpf.a -lelf -lz -lpthread -lmnl
 EXAMPLES_COMMON  := $(EXAMPLES_DIR)/common/statistics.o \
 					$(EXAMPLES_DIR)/common/utils.o \
-					$(EXAMPLES_DIR)/common/khashmap.o
+					$(EXAMPLES_DIR)/common/khashmap.o\
+					$(EXAMPLES_DIR)/common/crc32.o\
+					$(EXAMPLES_DIR)/common/fnv.o\
+					$(EXAMPLES_DIR)/common/haraka.o\
+					$(EXAMPLES_DIR)/common/murmur.o\
+					$(EXAMPLES_DIR)/common/timeit.o\
+					$(EXAMPLES_DIR)/common/timestamp.o\
+					$(EXAMPLES_DIR)/common/csum.o
+
+EXAMPLES_COMMON_TEST  := 	$(EXAMPLES_DIR)/common/haraka.o\
+							$(EXAMPLES_DIR)/common/murmur.o\
+							$(EXAMPLES_DIR)/common/fnv.o\
+							$(EXAMPLES_DIR)/common/crc32.o
+
+
 
 .PHONY: update_submodules clean $(CLANG) $(LLC)
 
-all: llvm-check update_submodules $(XSKNF_TARGET) $(EXAMPLES_TARGETS)
+all: llvm-check update_submodules $(XSKNF_TARGET) $(EXAMPLES_TARGETS) test
 
 update_submodules:
 	git submodule update --init --recursive
@@ -58,6 +82,7 @@ clean:
 	$(RM) $(EXAMPLES_TARGETS)
 	$(RM) $(EXAMPLES_KERN)
 	$(RM) $(EXAMPLES_COMMON)
+	$(RM) ./examples/agent/test
 
 llvm-check: $(CLANG) $(LLC)
 	@for TOOL in $^ ; do \
@@ -93,3 +118,6 @@ $(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF)
 
 $(EXAMPLES_TARGETS): %: %_user.o %_kern.o %.h $(EXAMPLES_COMMON) $(XSKNF_TARGET)
 	$(CC) $@_user.o $(EXAMPLES_COMMON) -o $@ $(EXAMPLES_LD) $(CFLAGS) -funroll-all-loops
+
+test: ./examples/agent/test.c $(EXAMPLES_COMMON)
+	$(CC) ./examples/agent/test.c $(EXAMPLES_COMMON_TEST) -o ./examples/agent/test $(CFLAGS) -funroll-all-loops
