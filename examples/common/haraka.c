@@ -1,5 +1,5 @@
 #include "haraka.h"
-#include <stdio.h>
+
 
 void load_constants() {
   rc[0] = _mm_set_epi32(0x0684704c,0xe620c00a,0xb2c5fef0,0x75817b9d);
@@ -68,6 +68,17 @@ void haraka256(unsigned char *out, const unsigned char *in, int inlen, int outle
   s[0] = _mm_xor_si128(s[0], LOAD(in));
   s[1] = _mm_xor_si128(s[1], LOAD(in + 16));
 
-  STORE(out, s[0]);
-  STORE(out + 16, s[1]);
+  // STORE(out, s[0]);
+  // STORE(out + 16, s[1]);
+  s[0] = _mm_xor_si128(s[0],s[1]); // xor 256 to 128;
+  uint64_t tmp64 = _mm_extract_epi64(s[0], 0) ^ _mm_extract_epi64(s[0], 1);
+  uint32_t tmp32 = (tmp64 >> 32) ^ (tmp64 & 0xffff); 
+  
+  //uint64_t second64 = _mm_extract_epi64(s[0], 1);
+  // first64 ^= second64;
+  // uint32_t first32 = (uint32_t)(first64 >> 32);
+  // uint32_t second32 = (uint32_t)(first64 & 0x0000ffff);
+  // first32 ^= second32;
+  *((uint32_t*)out) = tmp32;
+  // printf("%d\n", tmp32);
 }

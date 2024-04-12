@@ -35,9 +35,9 @@ XSKNF_C      := $(XSKNF_DIR)/xsknf.c
 XSKNF_O      := ${XSKNF_C:.c=.o}
 XSKNF_TARGET := $(XSKNF_DIR)/libxsknf.a
 
-EXAMPLES := agent/agent			\
-			agent/server_in			\
-			agent/server_en			\
+EXAMPLES := switch_agent/switch_agent			\
+			switch_agent/server_in			\
+			switch_agent/server_en			\
 			# firewall/firewall 			\
 			# load_balancer/load_balancer	\
 			# checksummer/checksummer		\
@@ -82,7 +82,7 @@ clean:
 	$(RM) $(EXAMPLES_TARGETS)
 	$(RM) $(EXAMPLES_KERN)
 	$(RM) $(EXAMPLES_COMMON)
-	$(RM) ./examples/agent/test
+	$(RM) ./examples/switch_agent/test
 
 llvm-check: $(CLANG) $(LLC)
 	@for TOOL in $^ ; do \
@@ -119,5 +119,5 @@ $(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF)
 $(EXAMPLES_TARGETS): %: %_user.o %_kern.o %.h $(EXAMPLES_COMMON) $(XSKNF_TARGET)
 	$(CC) $@_user.o $(EXAMPLES_COMMON) -o $@ $(EXAMPLES_LD) $(CFLAGS) -funroll-all-loops
 
-test: ./examples/agent/test.c $(EXAMPLES_COMMON)
-	$(CC) ./examples/agent/test.c $(EXAMPLES_COMMON_TEST) -o ./examples/agent/test $(CFLAGS) -funroll-all-loops
+test: ./examples/switch_agent/test.c $(EXAMPLES_COMMON)
+	$(CC) ./examples/switch_agent/test.c $(EXAMPLES_COMMON_TEST) -o ./examples/switch_agent/test $(CFLAGS) -funroll-all-loops

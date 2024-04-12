@@ -5,7 +5,8 @@ Optimized Implementations for Haraka256 and Haraka512
 #define HARAKA_H_
 
 #include "immintrin.h"
-
+#include <stdio.h>
+#include <stdint.h>
 #define NUMROUNDS 5
 
 #define u64 unsigned long

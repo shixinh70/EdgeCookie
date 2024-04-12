@@ -1,4 +1,4 @@
-#include "agent.h"
+#include "switch_agent.h"
 
 enum action {
 	ACTION_REDIRECT,
@@ -65,8 +65,6 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 
 	void* tcp_opt = (void*)(tcp + 1);
 
-	
-
 	if(ingress_ifindex == 0){
 		if(tcp->syn && (!tcp->ack)) {
 		
@@ -126,8 +124,6 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			// Get flow's hash cookie
 		
 			uint32_t hashcookie = 0;
-
-			
 			haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32); //Output 256, Input 256
 			// hashcooke_32 = hashcookie_256[0] ^ hashcookie_256[1];
 			// for(int i = 2; i < 8 ;i++){ 						  //fold to 32bit by xor
@@ -297,7 +293,7 @@ int swich_agent (int argc, char **argv){
 
 	if (config.working_mode & MODE_XDP) {
 		struct bpf_map *global_map = bpf_object__find_map_by_name(obj,
-				"macswap_.bss");
+				"switch_a.bss");
 		if (!global_map) {
 			fprintf(stderr, "ERROR: unable to retrieve eBPF global data\n");
 			exit(EXIT_FAILURE);
@@ -335,6 +331,8 @@ int swich_agent (int argc, char **argv){
 
 	init_sand(16);
 	
+	load_constants();
+
 	xsknf_start_workers();
 
 	init_stats();
