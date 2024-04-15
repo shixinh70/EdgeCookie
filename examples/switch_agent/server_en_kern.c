@@ -1,4 +1,4 @@
-#include "server_en.h"
+#include "server.h"
 uint8_t cur_cookie_head = 0;
 __u32 max_rtt = 0 ;
 char _license[] SEC("license") = "GPL";

@@ -1,0 +1,62 @@
+git submodule update --init --recursive
+make -C ./xdp-tools libxdp
+make[1]: Entering directory '/home/xins/mount/xsknf_new/xdp-tools'
+
+lib
+
+  libxdp
+make[1]: Leaving directory '/home/xins/mount/xsknf_new/xdp-tools'
+make -C ./xdp-tools/lib libbpf
+make[1]: Entering directory '/home/xins/mount/xsknf_new/xdp-tools/lib'
+make[1]: Nothing to be done for 'libbpf'.
+make[1]: Leaving directory '/home/xins/mount/xsknf_new/xdp-tools/lib'
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/switch_agent/switch_agent_user.o examples/switch_agent/switch_agent_user.c
+clang -S \
+	-target bpf \
+	-Wall \
+	-Wno-unused-value \
+	-Wno-pointer-sign \
+	-Wno-compare-distinct-pointer-types \
+	-Werror \
+	-I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer \
+	-emit-llvm -c -g -o examples/switch_agent/switch_agent_kern.ll examples/switch_agent/switch_agent_kern.c
+llc -march=bpf -filetype=obj -o examples/switch_agent/switch_agent_kern.o examples/switch_agent/switch_agent_kern.ll
+rm -f examples/switch_agent/switch_agent_kern.ll
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/statistics.o examples/common/statistics.c
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/utils.o examples/common/utils.c
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/khashmap.o examples/common/khashmap.c
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/crc32.o examples/common/crc32.c
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/fnv.o examples/common/fnv.c
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/haraka.o examples/common/haraka.c
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/murmur.o examples/common/murmur.c
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/timeit.o examples/common/timeit.c
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/timestamp.o examples/common/timestamp.c
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/common/csum.o examples/common/csum.c
+cc examples/switch_agent/switch_agent_user.o ./examples/common/statistics.o ./examples/common/utils.o ./examples/common/khashmap.o ./examples/common/crc32.o ./examples/common/fnv.o ./examples/common/haraka.o ./examples/common/murmur.o ./examples/common/timeit.o ./examples/common/timestamp.o ./examples/common/csum.o -o examples/switch_agent/switch_agent -L./src/ -lxsknf -L./xdp-tools/lib/libxdp -l:libxdp.a -L./xdp-tools/lib/libbpf/src -l:libbpf.a -lelf -lz -lpthread -lmnl -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer -funroll-all-loops
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/switch_agent/server_in_user.o examples/switch_agent/server_in_user.c
+clang -S \
+	-target bpf \
+	-Wall \
+	-Wno-unused-value \
+	-Wno-pointer-sign \
+	-Wno-compare-distinct-pointer-types \
+	-Werror \
+	-I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer \
+	-emit-llvm -c -g -o examples/switch_agent/server_in_kern.ll examples/switch_agent/server_in_kern.c
+llc -march=bpf -filetype=obj -o examples/switch_agent/server_in_kern.o examples/switch_agent/server_in_kern.ll
+rm -f examples/switch_agent/server_in_kern.ll
+cc examples/switch_agent/server_in_user.o ./examples/common/statistics.o ./examples/common/utils.o ./examples/common/khashmap.o ./examples/common/crc32.o ./examples/common/fnv.o ./examples/common/haraka.o ./examples/common/murmur.o ./examples/common/timeit.o ./examples/common/timestamp.o ./examples/common/csum.o -o examples/switch_agent/server_in -L./src/ -lxsknf -L./xdp-tools/lib/libxdp -l:libxdp.a -L./xdp-tools/lib/libbpf/src -l:libbpf.a -lelf -lz -lpthread -lmnl -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer -funroll-all-loops
+cc -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer   -c -o examples/switch_agent/server_en_user.o examples/switch_agent/server_en_user.c
+clang -S \
+	-target bpf \
+	-Wall \
+	-Wno-unused-value \
+	-Wno-pointer-sign \
+	-Wno-compare-distinct-pointer-types \
+	-Werror \
+	-I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer \
+	-emit-llvm -c -g -o examples/switch_agent/server_en_kern.ll examples/switch_agent/server_en_kern.c
+llc -march=bpf -filetype=obj -o examples/switch_agent/server_en_kern.o examples/switch_agent/server_en_kern.ll
+rm -f examples/switch_agent/server_en_kern.ll
+cc examples/switch_agent/server_en_user.o ./examples/common/statistics.o ./examples/common/utils.o ./examples/common/khashmap.o ./examples/common/crc32.o ./examples/common/fnv.o ./examples/common/haraka.o ./examples/common/murmur.o ./examples/common/timeit.o ./examples/common/timestamp.o ./examples/common/csum.o -o examples/switch_agent/server_en -L./src/ -lxsknf -L./xdp-tools/lib/libxdp -l:libxdp.a -L./xdp-tools/lib/libbpf/src -l:libbpf.a -lelf -lz -lpthread -lmnl -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer -funroll-all-loops
+cc ./examples/switch_agent/test.c ./examples/common/haraka.o ./examples/common/murmur.o ./examples/common/fnv.o ./examples/common/crc32.o -o ./examples/switch_agent/test -I./src -I./headers -I./xdp-tools/lib/../headers -I./xdp-tools/lib/libbpf/src/root/usr/include -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer -funroll-all-loops

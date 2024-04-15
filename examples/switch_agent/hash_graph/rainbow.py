@@ -1,30 +1,46 @@
 from PIL import Image
-def generate_rainbow_image(colors):
+import colorsys
+import sys
+
+def generate_rainbow_image(input_file, output_file):
     size = 256
-    img = Image.new('RGB', (size, size), color="white")
+    img = Image.new('RGB', (size, size), color="black")
     pixels = img.load()
+    used_list = [0] * 65536
+    
+    # 从txt文件中读取数字
+    with open(input_file, 'r') as f:
+        input_numbers = list(map(int, f.read().split()))
 
-    for i, color in enumerate(colors):
-        # 計算該數字對應的位置
-        x = color % size
-        y = color // size
+    for i, color in enumerate(input_numbers):
+        # 计算该数字对应的位置
+        if used_list[color] == 0:
+            x = i % size
+            y = i // size
+            
+            # 将x坐标映射到0-1之间
+            x_norm = x / (size - 1)
+            
+            # 将数字映射到HSV色彩空间中的色相值（0-1之间）
+            hue = color / 65535.0
+            
+            # 根据x坐标调整亮度
+            # brightness = 0.1 + (1- x_norm) * 0.9  # 0.5表示基础亮度，x_norm*0.5表示最大亮度变化范围
+            
+            # 将HSV色彩空间中的色相、饱和度、亮度转换为RGB色彩空间中的颜色值
+            rgb_color = tuple(int(c * 255) for c in colorsys.hsv_to_rgb(hue, 1.0, 1.0))
 
-        # 將數字轉換為RGB顏色值
-        if 0 <= x < size and 0 <= y < size:
-            red = color // 256**2
-            green = (color // 256) % 256
-            blue = color % 256
-            # 將顏色設置到畫布的對應位置
-            pixels[x, y] = (red, green, blue)
-        else:
-            print(f"Index out of range: ({x}, {y})")
-    return img
+            # 将颜色设置到画布的对应位置
+            pixels[x, y] = rgb_color
+            used_list[color] = 1
+    
+    # 保存图片
+    img.save(output_file)
 
-# 從txt文件中讀取數字
-with open('murmur2.txt', 'r') as f:
-    input_numbers = list(map(int, f.read().split()))
-
-# 生成彩虹圖
-rainbow_image = generate_rainbow_image(input_numbers)
-# 保存圖片
-rainbow_image.save('murmur2_test.png')
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python3 ./rainbow.py input_file output_file")
+    else:
+        input_file = sys.argv[1]
+        output_file = sys.argv[2]
+        generate_rainbow_image(input_file, output_file)

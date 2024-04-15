@@ -71,7 +71,6 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			// Store pkt's 5 turple
 			flow.src_ip = ip->saddr;
 			flow.dst_ip = ip->daddr;
-			flow.seq = tcp->seq;
 			flow.src_port = tcp->source;
 			flow.dst_port = tcp->dest;
 
@@ -154,7 +153,6 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			if (ts->tsecr == TS_START){
 				flow.src_ip = ip->saddr;
 				flow.dst_ip = ip->daddr;
-				flow.seq = bpf_htonl(bpf_ntohl(tcp->seq) -1);
 				flow.src_port = tcp->source;
 				flow.dst_port = tcp->dest;
 				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
@@ -172,11 +170,19 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 					DEBUG_PRINT("Switch agent: Pass map_cookie\n");
 				}
 				else{
-					DEBUG_PRINT("Switch agent: Fail map_cookie\n");
-					// if(change_key_duration){
-					// 	DEBUG_PRINT("Switch agent: Validate hash_cookie\n");
-					// 	if(((hybrid_cookie << 2) >> 18) == )
-					// }
+					//DEBUG_PRINT("Switch agent: Fail map_cookie\n");
+					if(change_key_duration){
+						DEBUG_PRINT("Switch agent: Validate hash_cookie\n");
+						haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
+						hashcookie = (hashcookie >> 16) ^ (hashcookie & 0xffff);
+						if(((hybrid_cookie >> 16) & 0x3fff) == (hashcookie & 0x3fff)){
+							DEBUG_PRINT("Switch agent: Pass hash_cookie\n");
+						}
+						else{
+							DEBUG_PRINT("Switch agent: Fail hash_cookie\n");
+							return -1;
+						}
+					}
 					
 				}
 				
@@ -190,11 +196,12 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 	// Ingress from router eth2 (outbound)
 	else{ 
 		if(tcp->ece){
-			DEBUG_PRINT("Receive change seed packet!\n");
+			//printf("Receive change seed packet!\n");
 			uint16_t cookie_key = tcp->source;
 			uint16_t new_cookie = tcp->dest;
 			uint32_t new_hash_seed = tcp->seq;
-			uint32_t max_rtt = tcp->ack_seq;
+			change_key_duration = tcp->ack_seq;
+			
 			return -1;
 		}
 	}
@@ -329,7 +336,7 @@ int swich_agent (int argc, char **argv){
 
 	init_hash_cookies();
 
-	init_sand(16);
+	init_sand(20);
 	
 	load_constants();
 

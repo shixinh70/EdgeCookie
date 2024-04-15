@@ -1,6 +1,9 @@
-#include "server_en.h"
+#include "server.h"
 uint64_t init = 0;
 __u16 map_cookies[65536] = {0};
+__u32 dropcnt = 0;
+__u32 hash_seed = 1234;
+__u32 testcnt = 0;
 char _license[] SEC("license") = "GPL";
 
 struct {
@@ -19,8 +22,7 @@ struct {
         __uint(pinning, LIBBPF_PIN_BY_NAME);
 } rtt_map SEC(".maps");
 
-__u32 dropcnt = 0;
-__u32 hash_seed = 1234;
+
 
 #define DROP_THRESH 100
 // main router logic
@@ -48,10 +50,13 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
         int ip_proto = parse_iphdr(&cur, data_end, &ip);
         if(ip_proto == -1) return XDP_DROP;
         if(ip_proto == IPPROTO_TCP){
-
-        
+            
+                
             int tcphdr_len = parse_tcphdr(&cur, data_end, &tcp);
             if(tcphdr_len == -1) return XDP_DROP;
+
+
+
 
             if(DEBUG){
                 __u16* ptr ; 
@@ -64,8 +69,57 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                 DEBUG_PRINT("flag = %u, IP_totlen = %u, tcphdr_len = %u\n", 
                             tcp_old_flag, bpf_ntohs(ip->tot_len), tcp->doff * 4);
             }
-            
-            
+            if(DROPTEST){
+                testcnt ++;
+                //bpf_printk("%d\n",testcnt);
+                if(testcnt >= DROP_THRESH){
+                    //bpf_printk ("SERVER_IN: Start change hash_seed!\n");
+
+                    ip->saddr ^= ip->daddr;
+                    ip->daddr ^= ip->saddr;
+                    ip->saddr ^= ip->daddr;
+
+                    // tcp->source ^= tcp->dest;
+                    // tcp->dest ^= tcp->source;
+                    // tcp->source ^= tcp->dest;
+
+                    // Send packet with ECE flag
+                    tcp->ece = 1;
+
+                    struct eth_mac_t mac_tmp;
+                    __builtin_memcpy(&mac_tmp, eth->h_source, 6);
+                    __builtin_memcpy(eth->h_source, eth->h_dest, 6);
+                    __builtin_memcpy(eth->h_dest, &mac_tmp, 6);
+
+                    __u32* rtt_p;
+                    __u32 zero = 0;
+                    rtt_p = bpf_map_lookup_elem(&rtt_map,&zero);
+                    if(!rtt_p){
+                        DEBUG_PRINT ("SERVER_IN: Look up rtt_map fail!\n");
+                        return XDP_DROP;
+                    }
+
+                    __u16 cookie_key = MurmurHash2(&ip->saddr,4,hash_seed);
+                    //if(cookie_key > 65535) return XDP_DROP;
+                    __u16 new_cookie = (bpf_get_prandom_u32() % 0xffff);
+                    //if(new_cookie > 65535) return XDP_DROP;
+                    map_cookies[cookie_key] = new_cookie;
+                    __u32 new_seed = bpf_get_prandom_u32();
+                    hash_seed = new_seed;
+                    tcp->source = cookie_key;
+                     tcp->dest = new_cookie;
+                    tcp->seq = new_seed;
+                    tcp->ack_seq = *rtt_p;
+                    dropcnt = 0;
+                    testcnt = 0;
+                    cookie_key ++;
+                    return XDP_TX;
+                    
+                }
+            }
+
+
+
             
             if(tcphdr_len >= 32){ // Timestamp need 12 byte (Nop Nop timestamp)
 
@@ -158,7 +212,9 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                             DEBUG_PRINT ("SERVER_IN: Connection not exist in map!\n");
                             dropcnt ++;
                             DEBUG_PRINT ("SERVER_IN: Current dropcnt = %u\\%d \n",dropcnt,DROP_THRESH);
-                            if(dropcnt == DROP_THRESH){
+
+                            // Change seed logic
+                            if(0){
                                 DEBUG_PRINT ("SERVER_IN: Start change hash_seed!\n");
 
                                 ip->saddr ^= ip->daddr;

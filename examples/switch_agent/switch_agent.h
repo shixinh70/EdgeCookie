@@ -24,7 +24,7 @@
 #include "murmur.h"
 
 
-#define DEBUG 0
+#define DEBUG 1
 #define DEBUG_PRINT(fmt, ...) \
 	if (DEBUG)                \
 	printf(fmt, ##__VA_ARGS__)
@@ -57,12 +57,11 @@ struct global_data {
 };
 
 struct pkt_5tuple {
-  uint32_t seq;
   uint32_t src_ip;
   uint32_t dst_ip;
   uint16_t src_port;
   uint16_t dst_port;
-  uint8_t sand[16];
+  uint8_t sand[20];
 } __attribute__((packed));
 
 

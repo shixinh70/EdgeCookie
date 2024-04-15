@@ -43,6 +43,8 @@ EXAMPLES := switch_agent/switch_agent			\
 			# checksummer/checksummer		\
 			# lbfw/lbfw					\
 			# test_memory/test_memory
+
+
 EXAMPLES_DIR     := ./examples
 EXAMPLES_TARGETS := $(addprefix $(EXAMPLES_DIR)/,$(EXAMPLES))
 EXAMPLES_USER	 := $(addsuffix _user.o,$(EXAMPLES_TARGETS))
@@ -82,6 +84,7 @@ clean:
 	$(RM) $(EXAMPLES_TARGETS)
 	$(RM) $(EXAMPLES_KERN)
 	$(RM) $(EXAMPLES_COMMON)
+	
 	$(RM) ./examples/switch_agent/test
 
 llvm-check: $(CLANG) $(LLC)
@@ -103,7 +106,7 @@ $(XSKNF_O): $(XSKNF_C) $(XSKNF_H) $(OBJECT_LIBXDP) $(OBJECT_LIBBPF)
 $(XSKNF_TARGET): $(XSKNF_O)
 	$(AR) r -o $@ $(XSKNF_O)
 
-$(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF)
+$(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF) ./examples/switch_agent/server.h
 	$(CLANG) -S \
 		-target bpf \
 		-Wall \
@@ -116,8 +119,10 @@ $(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF)
 	$(LLC) -march=bpf -filetype=obj -o $@ ${@:.o=.ll}
 	$(RM) ${@:.o=.ll}
 
+
 $(EXAMPLES_TARGETS): %: %_user.o %_kern.o %.h $(EXAMPLES_COMMON) $(XSKNF_TARGET)
 	$(CC) $@_user.o $(EXAMPLES_COMMON) -o $@ $(EXAMPLES_LD) $(CFLAGS) -funroll-all-loops
+
 
 test: ./examples/switch_agent/test.c $(EXAMPLES_COMMON)
 	$(CC) ./examples/switch_agent/test.c $(EXAMPLES_COMMON_TEST) -o ./examples/switch_agent/test $(CFLAGS) -funroll-all-loops

@@ -170,7 +170,7 @@ void hash_distribution(char* name,hash_function func){
         for(uint32_t j= i*65536;j< (i+1)*65536;j++){
             uint32_t k = j ^ seeds[i];
             uint32_t h = func((uint8_t*)&k,4,seeds[i]);
-            h = (h >>16) ^ (h & 0xffff);
+            h = (h >> 16) ^ (h & 0xffff);
             if(array[h] == 0){
                 cnt++;
             }
@@ -207,7 +207,7 @@ static __always_inline uint32_t fnv1a_perf ( const void * key, int len, uint32_t
         return fnv_32a_buf((uint8_t*)key,len);
 }
 static __always_inline uint32_t crc_perf ( const void * key, int len, uint32_t seed ){
-    return xcrc32(key,len,seed);
+    return xcrc32(key,len,0xffff);
 }
 
 
@@ -256,30 +256,37 @@ void hsiphash_perf_time(unsigned char* out, const unsigned char* in, int outlen,
 	int v2 = c2 ^ key0;
 	int v3 = c3 ^ key1; 
 	
-	//first message 
-	v3 = v3 ^ (*ptr);
-	SIPROUND;
-	SIPROUND;
-	v0 = v0 ^ (*ptr); 
+    for(int i=0;i<(inlen/4);i++){
+        v3 = v3 ^ (*(ptr+i));
+        SIPROUND;
+        SIPROUND;
+        v0 = v0 ^ (*(ptr+i)); 
+    }
 
-	//second message 
-	v3 = v3 ^ (*(ptr+1));
-	SIPROUND;
-	SIPROUND;
-	v0 = v0 ^ (*(ptr+1)); 
+	// //first message 
+	// v3 = v3 ^ (*ptr);
+	// SIPROUND;
+	// SIPROUND;
+	// v0 = v0 ^ (*ptr); 
 
-	//third message
+	// //second message 
+	// v3 = v3 ^ (*(ptr+1));
+	// SIPROUND;
+	// SIPROUND;
+	// v0 = v0 ^ (*(ptr+1)); 
+
+	// //third message
 	  
-	v3 = v3 ^ (*(ptr+2));
-	SIPROUND;
-	SIPROUND;
-	v0 = v0 ^ (*(ptr+2)); 
+	// v3 = v3 ^ (*(ptr+2));
+	// SIPROUND;
+	// SIPROUND;
+	// v0 = v0 ^ (*(ptr+2)); 
 
-	//fourth message 
-	v3 = v3 ^ (*(ptr+3));
-	SIPROUND;
-	SIPROUND;
-	v0 = v0 ^ (*(ptr+3)); 
+	// //fourth message 
+	// v3 = v3 ^ (*(ptr+3));
+	// SIPROUND;
+	// SIPROUND;
+	// v0 = v0 ^ (*(ptr+3)); 
 	
 	//finalization
 	v2 = v2 ^ 0xFF; 
@@ -302,14 +309,14 @@ void graph(){
 }
 
 int main(){
-	load_constants();
-    hash_distribution("djb2",djb2_perf);
-    hash_distribution("djb2a",djb2a_perf);
-    hash_distribution("sdbm",sdbm_perf);
-    hash_distribution("sdbma",sdbma_perf);
-    hash_distribution("fnvla",fnv1a_perf);
-    hash_distribution("murmur3",murmurhash3);
-    hash_distribution("crc32",crc_perf);
+	// load_constants();
+    // hash_distribution("djb2",djb2_perf);
+    // hash_distribution("djb2a",djb2a_perf);
+    // hash_distribution("sdbm",sdbm_perf);
+    // hash_distribution("sdbma",sdbma_perf);
+    // hash_distribution("fnvla",fnv1a_perf);
+    // hash_distribution("murmur3",murmurhash3);
+    // hash_distribution("crc32",crc_perf);
 
 
     timeit ("crc32",crc_perf_time,4,4);
@@ -321,13 +328,8 @@ int main(){
     timeit ("sdbma",sdbma_perf_time,4,4);
     timeit ("fnv1",fnv1_perf_time,4,4);
     timeit ("fnv1a",fnv1a_perf_time,4,4);
-    timeit ("hsiphash",hsiphash_perf_time,16,4);
+    timeit ("hsiphash",hsiphash_perf_time,12,4);
     timeit ("haraka256",haraka256,32,32);
-    // timeit ("djb2",djb2_perf_time,4,4);
-    // timeit ("haraka256",haraka256,32,32);
-    // for(int i=0;i<65536;i++){
-    //     printf("%d ",i);
-    // }
-    //graph();
+
 
 }
