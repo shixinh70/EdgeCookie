@@ -151,7 +151,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 				return -1;
 			}
 			uint32_t hashcookie = 0;
-			
+			// printf("%u\n",map_seeds[(ip->saddr & 0xffff)]);
 			// if ts.ecr =TS_START
 			// Packet for three way handshake, and client's first request which not receive corresponding ack.
 			// Can still use syncookie to validate packet  
