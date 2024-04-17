@@ -11,6 +11,8 @@ struct tcp_opt_ts
 	uint32_t tsecr;
 } __attribute__((packed));
 
+// parse_timestamp's offset from tcp's basic 20 bytes header
+// Return offset
 __u32 parse_timestamp(struct tcphdr *tcp);
 
 

@@ -14,7 +14,6 @@ static enum action opt_action = ACTION_REDIRECT;
 static int opt_double_macswap = 0;
 struct bpf_object *obj;
 struct xsknf_config config;
-struct pkt_5tuple flow ;
 
 uint32_t hash_seed = 1234;
 uint32_t change_key_duration = 0;
@@ -43,11 +42,11 @@ static __always_inline __u16 get_map_cookie(__u32 ipaddr, __u32 salt){
 	return map_cookies[key];
 }
 
-void init_sand(int sand_len){
-	for(int i=0;i<sand_len;i++){
-		flow.sand[i] = rand() & 0xff;
-	}
-}
+// void init_sand(int sand_len){
+// 	for(int i=0;i<sand_len/4;i++){
+// 		global_salt[i] = rand();
+// 	}
+// }
 
 void init_hash_cookies(){
 	for(int i=0;i<65536;i++){
@@ -58,6 +57,9 @@ void init_hash_cookies(){
 
 int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 {
+
+	// uint64_t timer = startTimer();
+	//struct pkt_5tuple flow = {0};
 	void *pkt_end = pkt + (*len);
 	struct ethhdr *eth = pkt;
 	struct iphdr* ip = (struct iphdr*)(eth +1);
@@ -66,13 +68,15 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 	void* tcp_opt = (void*)(tcp + 1);
 
 	if(ingress_ifindex == 0){
+		struct pkt_5tuple flow = {
+			.src_ip = ip->saddr,
+			.dst_ip = ip->daddr,
+			.src_port = tcp->source,
+			.dst_port = tcp->source,
+			.sand = {0x728ea123,0x8874adee,0x129033ae,0xff12e561,0x17abc223}
+		};
+
 		if(tcp->syn && (!tcp->ack)) {
-		
-			// Store pkt's 5 turple
-			flow.src_ip = ip->saddr;
-			flow.dst_ip = ip->daddr;
-			flow.src_port = tcp->source;
-			flow.dst_port = tcp->dest;
 
 			// Find out timestamp offset
 			struct tcp_opt_ts* ts;
@@ -83,12 +87,14 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 				return -1;
 			}
 
-			// Store rx pkt's tsval.
+			// Store rx pkt's tsval, then pur to ts.ecr
 			uint32_t rx_tsval = ts->tsval;
+
+			// Remove old tcp option part and replace to common_syn_ack option.
+			// Then adjust the packet length
 			int delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_synack_opt)) - (tcp->doff*4);
 			__u16 old_ip_totlen = ip->tot_len;
 			__u16 new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
-			// Replace old option to common syn ack packet's option
 			struct common_synack_opt sa_opt = {
 				.MSS = 0x18020402,
 				.SackOK = 0x0204,
@@ -109,25 +115,19 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			ip->daddr ^= ip->saddr;
 			ip->saddr ^= ip->daddr;
 			
-			// Update ip_csum
-			
+			// since we modify ip.totalen. We need to update ip_csum
 			__u32 ip_csum = ~csum_unfold(ip->check);
 			ip_csum = csum_add(ip_csum,~old_ip_totlen);
 			ip_csum = csum_add(ip_csum,new_ip_totlen);
 			ip->check = ~csum_fold(ip_csum);
 			
 			
-			// Modify tcphdr
 			__u32 rx_seq = tcp->seq;
 
-			// Get flow's hash cookie
-		
+			// Get flow's syncookie (by haraka256)
+			// Conver syn packet to synack, and put syncookie
 			uint32_t hashcookie = 0;
-			haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32); //Output 256, Input 256
-			// hashcooke_32 = hashcookie_256[0] ^ hashcookie_256[1];
-			// for(int i = 2; i < 8 ;i++){ 						  //fold to 32bit by xor
-			// 	hashcooke_32 ^= hashcookie_256[i];
-			// }
+			haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
 			tcp->seq = hashcookie;
 			tcp->ack_seq = bpf_htonl(bpf_ntohl(rx_seq) + 1);
 			tcp->source ^= tcp->dest;
@@ -148,45 +148,50 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 				return -1;
 			}
 			uint32_t hashcookie = 0;
-
-			// If ts == TS_START  then validate syncookie
+			
+			// if ts.ecr =TS_START
+			// Packet for three way handshake, and client's first request which not receive corresponding ack.
+			// Can still use syncookie to validate packet  
 			if (ts->tsecr == TS_START){
-				flow.src_ip = ip->saddr;
-				flow.dst_ip = ip->daddr;
-				flow.src_port = tcp->source;
-				flow.dst_port = tcp->dest;
 				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
-				//DEBUG_PRINT("%d %d\n",bpf_htonl(bpf_ntohl(tcp->ack_seq) -1), hashcookie);
 				if(bpf_htonl(bpf_ntohl(tcp->ack_seq) -1 ) != hashcookie){
 				DEBUG_PRINT("Switch agent: Fail syncookie check!\n");
 					return -1;
 				}
 			}
 
-			// Validate hybrid_cookie
+			// Other ack packet. Validate hybrid_cookie
 			else{
 				uint32_t hybrid_cookie = ntohl(ts->tsecr);
-				if((hybrid_cookie & 0xffff) == get_map_cookie(ip->saddr,hash_seed)){
-					DEBUG_PRINT("Switch agent: Pass map_cookie\n");
+				if(((hybrid_cookie & 0xffff) == get_map_cookie(ip->saddr,hash_seed))){
+					DEBUG_PRINT("Switch agent: Pass map_cookie, map cookie = %u, cal_map_cookie = %u\n"
+																				,hybrid_cookie & 0xffff
+																				,get_map_cookie(ip->saddr,hash_seed) );
 				}
 				else{
-					//DEBUG_PRINT("Switch agent: Fail map_cookie\n");
+					DEBUG_PRINT("Switch agent: Fail map_cookie, map cookie = %u, cal_map_cookie = %u\n"
+																				,hybrid_cookie & 0xffff
+																				,get_map_cookie(ip->saddr,hash_seed) );
 					if(change_key_duration){
-						DEBUG_PRINT("Switch agent: Validate hash_cookie\n");
+						DEBUG_PRINT("Switch agent: Change seed for %u\n",change_key_duration);
 						haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
 						hashcookie = (hashcookie >> 16) ^ (hashcookie & 0xffff);
 						if(((hybrid_cookie >> 16) & 0x3fff) == (hashcookie & 0x3fff)){
 							DEBUG_PRINT("Switch agent: Pass hash_cookie\n");
+							//printf("pass hash cookie %u %u %u %u\n",flow.src_ip,flow.dst_ip,flow.src_port,flow.dst_port);
 						}
 						else{
-							DEBUG_PRINT("Switch agent: Fail hash_cookie\n");
+							//printf("fail hash cookie %u %u %u %u\n",flow.src_ip,flow.dst_ip,flow.src_port,flow.dst_port);
+							DEBUG_PRINT("Switch agent: Fail hash_cookie, Drop packet\n");
 							return -1;
 						}
 					}
-					
+					else{
+						//DEBUG_PRINT("%u\n",change_key_duration);
+						DEBUG_PRINT("Switch agent: Drop packet\n");
+						return -1;
+					}
 				}
-				
-				
 			}
 			redirect_if(ingress_ifindex,RETH2,eth);
 			
@@ -196,12 +201,14 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 	// Ingress from router eth2 (outbound)
 	else{ 
 		if(tcp->ece){
-			//printf("Receive change seed packet!\n");
+			DEBUG_PRINT("Receive change seed packet!\n");
 			uint16_t cookie_key = tcp->source;
 			uint16_t new_cookie = tcp->dest;
 			uint32_t new_hash_seed = tcp->seq;
+			hash_seed = new_hash_seed;
+			printf("hash_seed = %u\n",hash_seed);
 			change_key_duration = tcp->ack_seq;
-			
+			map_cookies[cookie_key] = new_cookie;
 			return -1;
 		}
 	}
@@ -336,15 +343,25 @@ int swich_agent (int argc, char **argv){
 
 	init_hash_cookies();
 
-	init_sand(20);
+	//init_sand(20);
 	
 	load_constants();
 
 	xsknf_start_workers();
 
 	init_stats();
-
 	while (!benchmark_done) {
+		if(change_key_duration){
+			//printf("Sleep %u ms....\n",change_key_duration);
+			struct timespec sleep_time = {0};
+			sleep_time.tv_nsec = (change_key_duration + 1) * MSTONS;
+			//pthread_mutex_lock(&dutation_key);
+			nanosleep(&sleep_time, NULL);
+			//printf("wake up\n");
+			change_key_duration = 0;
+			//pthread_mutex_unlock(&dutation_key);
+		}
+
 		sleep(1);
 		if (!opt_quiet) {
 			dump_stats(config, obj, opt_extra_stats, opt_app_stats);

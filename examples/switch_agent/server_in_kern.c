@@ -1,5 +1,5 @@
 #include "server.h"
-uint64_t init = 0;
+uint8_t init = 0;
 __u16 map_cookies[65536] = {0};
 __u32 dropcnt = 0;
 __u32 hash_seed = 1234;
@@ -24,7 +24,6 @@ struct {
 
 
 
-#define DROP_THRESH 100
 // main router logic
 SEC("prog") int xdp_router(struct xdp_md *ctx) {
     void *data_end = (void *)(long)ctx->data_end;
@@ -34,28 +33,27 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
     struct iphdr* ip;
     struct tcphdr* tcp;
     if(!init){
-        
         for(int i = 0; i < 65536 ;i++){
             map_cookies[i] = i;
+            //bpf_printk("%u",map_cookies[i]);
         }
         init = 1;
     }
     cur.pos = data;
-    int ether_proto ;
-    ether_proto = parse_ethhdr(&cur,data_end,&eth);
-    if(ether_proto == -1) return XDP_DROP;
+    
+    int ether_proto = parse_ethhdr(&cur,data_end,&eth);
+    if(ether_proto == -1)
+        return XDP_DROP;
     
     if (bpf_htons(ether_proto) == ETH_P_IP) {
 
         int ip_proto = parse_iphdr(&cur, data_end, &ip);
-        if(ip_proto == -1) return XDP_DROP;
+        if(ip_proto == -1)
+            return XDP_DROP;
+
         if(ip_proto == IPPROTO_TCP){
-            
-                
             int tcphdr_len = parse_tcphdr(&cur, data_end, &tcp);
             if(tcphdr_len == -1) return XDP_DROP;
-
-
 
 
             if(DEBUG){
@@ -69,6 +67,8 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                 DEBUG_PRINT("flag = %u, IP_totlen = %u, tcphdr_len = %u\n", 
                             tcp_old_flag, bpf_ntohs(ip->tot_len), tcp->doff * 4);
             }
+
+            // Use 
             if(DROPTEST){
                 testcnt ++;
                 //bpf_printk("%d\n",testcnt);
@@ -99,42 +99,39 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                         return XDP_DROP;
                     }
 
-                    __u16 cookie_key = MurmurHash2(&ip->saddr,4,hash_seed);
-                    //if(cookie_key > 65535) return XDP_DROP;
+                    __u16 cookie_key = MurmurHash2(&ip->daddr,4,hash_seed); 
                     __u16 new_cookie = (bpf_get_prandom_u32() % 0xffff);
-                    //if(new_cookie > 65535) return XDP_DROP;
                     map_cookies[cookie_key] = new_cookie;
+
                     __u32 new_seed = bpf_get_prandom_u32();
                     hash_seed = new_seed;
+                    DEBUG_PRINT ("SERVER_IN: New hash_seed = %u\n",hash_seed);
+
                     tcp->source = cookie_key;
-                     tcp->dest = new_cookie;
+                    tcp->dest = new_cookie;
                     tcp->seq = new_seed;
                     tcp->ack_seq = *rtt_p;
-                    dropcnt = 0;
                     testcnt = 0;
-                    cookie_key ++;
                     return XDP_TX;
-                    
                 }
             }
 
-
-
-            
-            if(tcphdr_len >= 32){ // Timestamp need 12 byte (Nop Nop timestamp)
-
-                
+            // Packet with ts option
+            if(tcphdr_len >= 32){ 
                 struct tcp_opt_ts* ts;
-                //DEBUG_PRINT("SERVER_IN: TCP packet (with options) ingress\n");
+               
                 // This parse timestamp may can be optimize
                 // Switch agent have parse the timestamp so can put the ts type
                 // in some un-used header field.
                 if(tcp->ack && (!tcp->syn)){
                     int opt_ts_offset = parse_timestamp(&cur,tcp,data_end,&ts);
-                    if(opt_ts_offset == -1) return XDP_DROP;   
+                    if(opt_ts_offset == -1) return XDP_DROP;
+
                     __u32 tsecr = ts->tsecr;
                     void* tcp_header_end = (void*)tcp + (tcp->doff*4);
                     if(tcp_header_end > data_end) return XDP_DROP;
+
+
                     // Ack packet which TS == TS_START and no payload (Pass router's cookie check).
                     // Insert new connection 
                     DEBUG_PRINT("tsecr = %d TS_START = %d\n",tsecr, TS_START);
@@ -146,13 +143,13 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                             .src_port = tcp->source,
                             .dst_port = tcp->dest
                         };
-                        // struct map_val_t* val = bpf_map_lookup_elem (&conntrack_map, &key);
-                        // if(val == NULL) DEBUG_PRINT("No connection in conntrack_map, create new one\n");
-                        // else DEBUG_PRINT("Find connection in conntrack_map, update old one\n");
+
                         // Update and Create val are same function;
                         // Then store the ack for compute ack delta.
+                        // store client's timestamp
+
                         struct map_val_t val = {.delta = bpf_ntohl(tcp->ack_seq),
-                                                .ts_val_s = ts->tsval,
+                                                //.ts_val_s = ts->tsval,
                                                 .hash_cookie = bpf_htonl(bpf_ntohl(tcp->ack_seq) - 1)
                                                 };
                                          
@@ -164,20 +161,20 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                         __u32 old_tcp_ack = tcp->ack_seq;
                         __u64 tcp_csum = tcp->check;
                         __u32 old_tcp_tsecr = ts->tsecr;
-                        __u32* ptr ; 
-                        ptr = ((void*)tcp) + 12;
-                       
+                        __u32* flag_ptr ; 
 
+                        flag_ptr = ((void*)tcp) + 12;
                         // if(((void*)tcp) + 12 > data_end) return XDP_DROP;
                         // DEBUG_PRINT("ffffffff\n");
 
-                        if((void*)ptr + 4 > data_end) return XDP_DROP;
+                        if((void*)flag_ptr + 4 > data_end) return XDP_DROP;
                        
-                        __u32 tcp_old_flag = *ptr;
+                        __u32 tcp_old_flag = *flag_ptr;
                         tcp->ack = 0;tcp->syn = 1;
-                        __u32 tcp_new_flag = *ptr;
+                        __u32 tcp_new_flag = *flag_ptr;
 
-                        tcp->seq -= bpf_htonl(1);
+                        //tcp->seq -= bpf_htonl(1);
+                        tcp->seq = bpf_htonl(bpf_ntohl(tcp->seq)-1);
                         tcp->ack_seq = 0;
                         ts->tsecr = 0;
                         
@@ -189,13 +186,13 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                         tcp->check = csum_fold_helper_64(tcp_csum);
 
                     }
+
                     // Packet for transmit data (payload != 0)
                     // If ack packet not use for create connection, modify delta and replace cookie to server' ts 
-                    
-                    // Packet TSecr == TS_START (client's request) or other ack.
+                    // other ack.
                     else{      
                         DEBUG_PRINT("SERVER_IN: Packet is not used for create connection\n");
-                        
+
                         // Find pin_map (key = 4 turple); Q: key's order?
                         struct map_key_t key = {
                                 .src_ip = ip->saddr,
@@ -204,17 +201,21 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                                 .dst_port = tcp->dest
                             };
                         struct map_val_t val;
+                        
                         struct map_val_t* val_p = bpf_map_lookup_elem(&conntrack_map,&key);
+                        // Packet has create connection
                         if(val_p) {
                             DEBUG_PRINT ("SERVER_IN: Connection exist in map!\n");
                         }
+                        // Packet has no connection
+                        
                         else {
                             DEBUG_PRINT ("SERVER_IN: Connection not exist in map!\n");
                             dropcnt ++;
                             DEBUG_PRINT ("SERVER_IN: Current dropcnt = %u\\%d \n",dropcnt,DROP_THRESH);
 
                             // Change seed logic
-                            if(0){
+                            if(dropcnt >= DROP_THRESH){
                                 DEBUG_PRINT ("SERVER_IN: Start change hash_seed!\n");
 
                                 ip->saddr ^= ip->daddr;
@@ -255,40 +256,50 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                             }
                             return XDP_DROP;
                         }
-                        // Read val from pinned map;
+                    
                         if( bpf_probe_read_kernel(&val,sizeof(val),val_p) != 0){
                             DEBUG_PRINT ("SERVER_IN: Read map_val fail!\n");
                             return XDP_DROP;
                         }
 
                         __u32 rx_ack_seq = tcp->ack_seq;
-                        __u32 new_ack_seq;
                         __u32 rx_tsecr = ts->tsecr;
                         __u64 tcp_csum = tcp->check;
-
+                        __u32 new_ack_seq;
                         int modify = 0; 
+
+                        // flow's hybrid_cookie not init (client's first ack) or
+                        // oudated (first ack packet after change seed) 
                         if(val.cur_hash_seed != hash_seed){
                             __u32 hybrid_cookie = bpf_ntohl(val.hybrid_cookie);
-                            if(val.cur_hash_seed == 0){
-                                
-                            DEBUG_PRINT("TC: flow.Cur_hash_seed == 0, init hybrid cookie\n");
+
+                            // Not init
+                            if(val.cur_hash_seed == 0){                                
+                            bpf_printk("SERVER_IN: flow.Cur_hash_seed == 0, init hybrid cookie\n");
                             hybrid_cookie = get_hybrid_cookie(val.hash_cookie,ip->saddr,hash_seed);
                             hybrid_cookie &= 0x3fffffff; // mask out leftest 2 bits
-                            //hybrid_cookie += 0x40000000; //0100
                             }
+
+                            // Outdated
                             else{
-                                DEBUG_PRINT("TC: Cur hybrid cookie outdated, udpate new map cookie\n");
+                                bpf_printk("SERVER_IN: Cur hybrid cookie outdated, udpate new map cookie\n");
                                 uint32_t new_map_cookie = get_map_cookie(ip->saddr,hash_seed);
                                 hybrid_cookie = ((hybrid_cookie & 0xffff0000) | new_map_cookie);
                             }  
-                            hybrid_cookie += 0x40000000; //0100
-                            val.hybrid_cookie = bpf_htonl(hybrid_cookie);
-                            
 
+                            // Make the timestamp incremental
+                            hybrid_cookie += 0x40000000; 
+
+                            // Update outdated hybrid cookie
+                            val.hybrid_cookie = bpf_htonl(hybrid_cookie);
+                            bpf_printk("SERVER_IN: Cur hash cookie = %u\n",(hybrid_cookie >>16) & 0x3ffff);
+                            
+                            // Update cur_hash_seed
                             val.cur_hash_seed = hash_seed;
                             modify =1;
                         }
 
+                        // TCP handover
                         new_ack_seq = bpf_htonl(bpf_ntohl(tcp->ack_seq) - val.delta);
                         tcp->ack_seq = new_ack_seq; // Ack delta
                         __u32 new_tsecr = val.ts_val_s;
@@ -304,8 +315,8 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     }
                 }
 
-                // if synack at server_in, must be redirect synack from server_en
-                // conver to ack packet.
+                /* server_en will redirect server's synack to server_in,
+                so convert synack to ack and send to server */
                 else if(tcp->ack && tcp->syn){
 
                     

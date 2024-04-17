@@ -75,6 +75,8 @@ u128 rc[40];
   *(u64*)(out + 24) = (u64*)(s3)[0];
 
 void load_constants();
+
+// Return resault of haraka256 and fold 256 bit to 32 bit with xor
 void haraka256(unsigned char *out, const unsigned char *in, int inlen, int outlen);
 
 

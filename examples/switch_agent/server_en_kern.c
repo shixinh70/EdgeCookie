@@ -1,5 +1,5 @@
 #include "server.h"
-uint8_t cur_cookie_head = 0;
+//uint8_t cur_cookie_head = 0;
 __u32 max_rtt = 0 ;
 char _license[] SEC("license") = "GPL";
 
@@ -28,10 +28,8 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
     struct iphdr* ip;
     struct tcphdr* tcp;
 
-    
     cur.pos = data;
-    int ether_proto ;
-    ether_proto = parse_ethhdr(&cur,data_end,&eth);
+    int ether_proto = parse_ethhdr(&cur,data_end,&eth);
     if(ether_proto == -1) return TC_ACT_SHOT;
     
     if (bpf_htons(ether_proto) == ETH_P_IP) {
@@ -50,24 +48,12 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                 __u16 tcp_old_flag = *ptr;
                 tcp_old_flag = bpf_ntohs(tcp_old_flag);
                 tcp_old_flag &= 0x00ff;
-                
                 DEBUG_PRINT("TC: TCP packet in, seq = %u, ack = %u, ", bpf_ntohl(tcp->seq), bpf_ntohl(tcp->ack_seq));
                 DEBUG_PRINT("flag = %u, opt_len = %u\n", tcp_old_flag, tcp->doff * 4);
             }
             
 
             if(tcphdr_len >= 32){
-
-                // Timestamp need 12 byte (Nop Nop timestamp)
-                //DEBUG_PRINT("TC: TCP packet (with options) ingress\n");
-
-                // This parse timestamp may can be optimize
-                // Switch agent have parse the timestamp so can put the ts type
-                // in some un-used header field.
-                // TODO: Finish parse_synack.
-                
-                
-                // Find pin_map (key = 4 turple); Q: key's order?
                 struct map_key_t key = {
                         .src_ip = ip->daddr,
                         .dst_ip = ip->saddr,
@@ -91,7 +77,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
             
 
                 // if SYN-ACK packet (from server)
-                // Swap ip address, port, timestamp, mac. and conver it to ack.
+                // Swap ip address, port, timestamp, mac, and redirect to server_in
                 if(tcp->ack && tcp->syn){
 
                     struct tcp_opt_ts* ts;
@@ -116,9 +102,9 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
 
                     // Swap port and convert to ack packet
                     //__u64 tcp_csum = tcp->check;
-                    __u32* ptr ; 
-                    ptr = ((void*)tcp) + 12;
-                    if((void*)ptr + 4 > data_end) return TC_ACT_SHOT;
+                    // __u32* ptr ; 
+                    // ptr = ((void*)tcp) + 12;
+                    // if((void*)ptr + 4 > data_end) return TC_ACT_SHOT;
                        
                     // __u32 tcp_old_flag = *ptr;
                     // tcp->syn = 0;tcp->ack = 1;tcp->ece = 1;
@@ -193,7 +179,6 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                 // update val.tsval = tsval
                 // tsval = cookie (from here, cookie not longer be TS_START, but cookie)
                 // Router use TS==cookie to validate ACK packet.
-                
                 else {
                     struct tcp_opt_ts* ts;
                     int opt_ts_offset = parse_timestamp(&cur,tcp,data_end,&ts);
@@ -201,13 +186,14 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                     
                     // If seed had change, the head 2 bits of hybrid_cookie will increase
                     // then reset max_rtt stastics.
-                    uint8_t cookie_head = (bpf_ntohl(val.hybrid_cookie)) >> 30;
-                    if(cur_cookie_head != cookie_head){
-                        DEBUG_PRINT("TC: Detect change seed by cookiehead");
-                        cur_cookie_head = (cur_cookie_head + 1)%4;
+                    uint8_t pkt_cookie_head = (bpf_ntohl(val.hybrid_cookie)) >> 30;
+                    uint8_t cur_cookie_head = val.cur_cookie_head;
+                    if(cur_cookie_head != pkt_cookie_head){
+                        bpf_printk("TC: Detect change seed by cookiehead, max_rtt = %u\n",max_rtt);
+                        cur_cookie_head = (cur_cookie_head + 1) %4;
+                        val.cur_cookie_head = cur_cookie_head;
                         max_rtt = 0;
                     }
-
                     // store server's tsval and put hybrid cookie in the tsval
                     uint32_t rtt = 0;
                     rtt = bpf_ntohl(ts->tsval) - bpf_ntohl(val.ts_val_s);
@@ -216,7 +202,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                         max_rtt = rtt;
                         bpf_map_update_elem(&rtt_map,&zero,&rtt,BPF_ANY);
                     }
-                    //bpf_printk("TC: Max Rtt is %u ms\n",max_rtt);
+                    bpf_printk("TC: Max Rtt is %u ms\n",max_rtt);
                     
                     val.ts_val_s = ts->tsval;
                     ts->tsval = val.hybrid_cookie;
@@ -228,6 +214,8 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                                 bpf_ntohl(tcp->seq),bpf_ntohl(tcp->ack_seq), val.delta);
                 }
             }
+
+            // tcphdr len < 32
             else{
                 //DEBUG_PRINT("TC: No options TCP packet ingress, Foward\n");
             }

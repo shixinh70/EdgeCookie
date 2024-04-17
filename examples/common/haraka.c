@@ -45,6 +45,7 @@ void load_constants() {
 }
 
 void haraka256(unsigned char *out, const unsigned char *in, int inlen, int outlen) {
+  
   __m128i s[2], tmp;
 
   s[0] = LOAD(in);

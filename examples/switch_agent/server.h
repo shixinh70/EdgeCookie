@@ -18,8 +18,7 @@
 
 #ifndef ROUTER_H
 #define ROUTER_H
-#define DROPTEST 0
-#define DEBUG 1
+#define DEBUG 0
 #define DEBUG_PRINT(fmt, ...) \
 	if (DEBUG)                \
 	bpf_printk(fmt, ##__VA_ARGS__)
@@ -29,6 +28,8 @@
 #define MAX_TCP_OPTION 10
 #define MAX_ENTRY 5000
 
+#define DROPTEST 1
+#define DROP_THRESH 100000
 uint16_t map_cookies[65536];
 // SYN
 // MSS, SackOk, Timestamp
@@ -69,7 +70,8 @@ struct map_val_t {
         __u32 hash_cookie;
         __u32 cur_hash_seed;
         __u32 ts_val_s;
-        __u32 delta;	
+        __u32 delta;
+		__u32 cur_cookie_head;	
 };
 
 
@@ -532,7 +534,7 @@ static __always_inline __u16 get_hash_cookie(__u32 hash_cookie){
 static __always_inline __u16 get_map_cookie(__u32 ipaddr, __u32 salt){
 
 	__u16 key = MurmurHash2(&ipaddr,4,salt);
-	
+	bpf_printk("salt = %u, key = %u, map_cookie = %u",salt,key,map_cookies[key]);
 	return map_cookies[key];
 }
 

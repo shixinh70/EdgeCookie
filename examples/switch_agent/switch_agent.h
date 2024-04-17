@@ -22,9 +22,10 @@
 #include "haraka.h"
 #include "csum.h"
 #include "murmur.h"
-
-
-#define DEBUG 1
+#include "timeit.h"
+#include "pthread.h"
+#define MSTONS 1000000
+#define DEBUG 0
 #define DEBUG_PRINT(fmt, ...) \
 	if (DEBUG)                \
 	printf(fmt, ##__VA_ARGS__)
@@ -61,9 +62,12 @@ struct pkt_5tuple {
   uint32_t dst_ip;
   uint16_t src_port;
   uint16_t dst_port;
-  uint8_t sand[20];
+  uint32_t sand[5];
 } __attribute__((packed));
 
+// Redirect from ingress_ifindex to redirect_ifindex
+// Set eth.src to ingress_ifindex's mac and eth.dst to redirect_ifindex's mac
+static inline int redirect_if(int ingress_ifindex, int redirect_ifindex, struct ethhdr* eth);
 
 
 
