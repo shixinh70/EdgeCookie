@@ -1,9 +1,10 @@
 #include "server.h"
 uint8_t init = 0;
-__u16 map_cookies[65536] = {0};
-__u32 dropcnt = 0;
-__u32 hash_seed = 1234;
-__u32 testcnt = 0;
+//__u16 map_cookies[65536];
+//__u32 map_seeds[65536];
+__u32 dropcnt ;
+//__u32 hash_seed = 1234;
+__u32 testcnt ;
 char _license[] SEC("license") = "GPL";
 
 struct {
@@ -35,7 +36,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
     if(!init){
         for(int i = 0; i < 65536 ;i++){
             map_cookies[i] = i;
-            //bpf_printk("%u",map_cookies[i]);
+            map_seeds[i] = i;
         }
         init = 1;
     }
@@ -74,18 +75,6 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                 //bpf_printk("%d\n",testcnt);
                 if(testcnt >= DROP_THRESH){
                     //bpf_printk ("SERVER_IN: Start change hash_seed!\n");
-
-                    ip->saddr ^= ip->daddr;
-                    ip->daddr ^= ip->saddr;
-                    ip->saddr ^= ip->daddr;
-
-                    // tcp->source ^= tcp->dest;
-                    // tcp->dest ^= tcp->source;
-                    // tcp->source ^= tcp->dest;
-
-                    // Send packet with ECE flag
-                    tcp->ece = 1;
-
                     struct eth_mac_t mac_tmp;
                     __builtin_memcpy(&mac_tmp, eth->h_source, 6);
                     __builtin_memcpy(eth->h_source, eth->h_dest, 6);
@@ -98,19 +87,32 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                         DEBUG_PRINT ("SERVER_IN: Look up rtt_map fail!\n");
                         return XDP_DROP;
                     }
+                    uint16_t seed_key = (ip->saddr) & 0xffff;            
+                    __u16 cookie_key = MurmurHash2(&ip->saddr,4,seed_key); 
+                    __u16 new_cookie = (bpf_get_prandom_u32() & 0xffff);
 
-                    __u16 cookie_key = MurmurHash2(&ip->daddr,4,hash_seed); 
-                    __u16 new_cookie = (bpf_get_prandom_u32() % 0xffff);
-                    map_cookies[cookie_key] = new_cookie;
+                    /*  tricky way to pass varifier, ip should be big endian
+                        if want to take ip's most significant 16 bits. 
+                        we should mask with 0xffff  */
 
                     __u32 new_seed = bpf_get_prandom_u32();
-                    hash_seed = new_seed;
-                    DEBUG_PRINT ("SERVER_IN: New hash_seed = %u\n",hash_seed);
+                    map_cookies[cookie_key] = new_cookie;
+                    map_seeds[seed_key] = new_seed;
+
+                    //hash_seed = new_seed;
+                    //DEBUG_PRINT ("SERVER_IN: New hash_seed = %u\n",hash_seed);
+
+                    ip->saddr ^= ip->daddr;
+                    ip->daddr ^= ip->saddr;
+                    ip->saddr ^= ip->daddr;
 
                     tcp->source = cookie_key;
                     tcp->dest = new_cookie;
+                    tcp->window = seed_key;
                     tcp->seq = new_seed;
                     tcp->ack_seq = *rtt_p;
+                    tcp->ece = 1;
+
                     testcnt = 0;
                     return XDP_TX;
                 }
@@ -191,8 +193,9 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     // If ack packet not use for create connection, modify delta and replace cookie to server' ts 
                     // other ack.
                     else{      
-                        DEBUG_PRINT("SERVER_IN: Packet is not used for create connection\n");
+                        DEBUG_PRINT("SERVER_IN: Packet is not used for create connection\n"); 
 
+                        uint16_t seed_key = ip->saddr & 0xffff;
                         // Find pin_map (key = 4 turple); Q: key's order?
                         struct map_key_t key = {
                                 .src_ip = ip->saddr,
@@ -211,23 +214,12 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                         
                         else {
                             DEBUG_PRINT ("SERVER_IN: Connection not exist in map!\n");
+
                             dropcnt ++;
                             DEBUG_PRINT ("SERVER_IN: Current dropcnt = %u\\%d \n",dropcnt,DROP_THRESH);
-
                             // Change seed logic
                             if(dropcnt >= DROP_THRESH){
                                 DEBUG_PRINT ("SERVER_IN: Start change hash_seed!\n");
-
-                                ip->saddr ^= ip->daddr;
-                                ip->daddr ^= ip->saddr;
-                                ip->saddr ^= ip->daddr;
-
-                                // tcp->source ^= tcp->dest;
-                                // tcp->dest ^= tcp->source;
-                                // tcp->source ^= tcp->dest;
-
-                                // Send packet with ECE flag
-                                tcp->ece = 1;
 
                                 struct eth_mac_t mac_tmp;
                                 __builtin_memcpy(&mac_tmp, eth->h_source, 6);
@@ -241,18 +233,34 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                                     DEBUG_PRINT ("SERVER_IN: Look up rtt_map fail!\n");
                                     return XDP_DROP;
                                 }
-                                __u16 cookie_key = MurmurHash2(&ip->saddr,4,hash_seed);
-                                __u16 new_cookie = (bpf_get_prandom_u32() % 0xffff);
-                                map_cookies[cookie_key] = new_cookie;
+                                //uint16_t seed_key = (ip->saddr) & 0xffff;            
+                                __u16 cookie_key = MurmurHash2(&ip->saddr,4,seed_key); 
+                                __u16 new_cookie = (bpf_get_prandom_u32() & 0xffff);
+
+                                /*  tricky way to pass varifier, ip should be big endian
+                                    if want to take ip's most significant 16 bits. 
+                                    we should mask with 0xffff  */
+
                                 __u32 new_seed = bpf_get_prandom_u32();
-                                hash_seed = new_seed;
+                                map_cookies[cookie_key] = new_cookie;
+                                map_seeds[seed_key] = new_seed;
+
+                                //hash_seed = new_seed;
+                                //DEBUG_PRINT ("SERVER_IN: New hash_seed = %u\n",hash_seed);
+
+                                ip->saddr ^= ip->daddr;
+                                ip->daddr ^= ip->saddr;
+                                ip->saddr ^= ip->daddr;
+
                                 tcp->source = cookie_key;
                                 tcp->dest = new_cookie;
+                                tcp->window = seed_key;
                                 tcp->seq = new_seed;
                                 tcp->ack_seq = *rtt_p;
-                                dropcnt = 0;
+                                tcp->ece = 1;
+
+                                testcnt = 0;
                                 return XDP_TX;
-                                
                             }
                             return XDP_DROP;
                         }
@@ -270,20 +278,20 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
 
                         // flow's hybrid_cookie not init (client's first ack) or
                         // oudated (first ack packet after change seed) 
-                        if(val.cur_hash_seed != hash_seed){
+                        if(val.cur_hash_seed != map_seeds[seed_key]){
                             __u32 hybrid_cookie = bpf_ntohl(val.hybrid_cookie);
 
                             // Not init
                             if(val.cur_hash_seed == 0){                                
                             bpf_printk("SERVER_IN: flow.Cur_hash_seed == 0, init hybrid cookie\n");
-                            hybrid_cookie = get_hybrid_cookie(val.hash_cookie,ip->saddr,hash_seed);
+                            hybrid_cookie = get_hybrid_cookie(val.hash_cookie,ip->saddr,map_seeds[seed_key]);
                             hybrid_cookie &= 0x3fffffff; // mask out leftest 2 bits
                             }
 
                             // Outdated
                             else{
                                 bpf_printk("SERVER_IN: Cur hybrid cookie outdated, udpate new map cookie\n");
-                                uint32_t new_map_cookie = get_map_cookie(ip->saddr,hash_seed);
+                                uint32_t new_map_cookie = get_map_cookie(ip->saddr);
                                 hybrid_cookie = ((hybrid_cookie & 0xffff0000) | new_map_cookie);
                             }  
 
@@ -295,7 +303,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                             bpf_printk("SERVER_IN: Cur hash cookie = %u\n",(hybrid_cookie >>16) & 0x3ffff);
                             
                             // Update cur_hash_seed
-                            val.cur_hash_seed = hash_seed;
+                            val.cur_hash_seed = map_seeds[seed_key];
                             modify =1;
                         }
 

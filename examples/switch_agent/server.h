@@ -30,7 +30,10 @@
 
 #define DROPTEST 1
 #define DROP_THRESH 100000
+
 uint16_t map_cookies[65536];
+uint32_t map_seeds[65536];
+
 // SYN
 // MSS, SackOk, Timestamp
 const __u64 syn_1_mask = 0x0008000400000002;
@@ -521,9 +524,8 @@ static __always_inline uint32_t MurmurHash2 ( const void * key, int len, uint32_
   h ^= h >> 13;
   h *= m;
   h ^= h >> 15;
-
-  
-  return h;//(h >>16 )^ (h&0xffff);
+  //h = (h >>16 )^ (h&0xffff);
+  return h;
 }
 
 
@@ -531,17 +533,17 @@ static __always_inline __u16 get_hash_cookie(__u32 hash_cookie){
 	return (hash_cookie >> 16) ^ (hash_cookie & 0xffff);
 }
 
-static __always_inline __u16 get_map_cookie(__u32 ipaddr, __u32 salt){
+static __always_inline __u16 get_map_cookie(__u32 ipaddr){
 
-	__u16 key = MurmurHash2(&ipaddr,4,salt);
-	bpf_printk("salt = %u, key = %u, map_cookie = %u",salt,key,map_cookies[key]);
-	return map_cookies[key];
+	uint16_t seed_key = ipaddr & 0xffff;
+	__u16 cookie_key = MurmurHash2(&ipaddr,4,map_seeds[seed_key]);
+	return map_cookies[cookie_key];
 }
 
 static __always_inline __u32 get_hybrid_cookie(__u32 syn_cookie, __u32 ipaddr, __u32 salt){
 
 	__u32 hash_cookie = get_hash_cookie(syn_cookie);
-	__u32 map_cookie = get_map_cookie(ipaddr, salt);
+	__u32 map_cookie = get_map_cookie(ipaddr);
 	return (hash_cookie << 16) | map_cookie;
 
 }

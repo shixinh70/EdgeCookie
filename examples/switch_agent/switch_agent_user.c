@@ -15,10 +15,10 @@ static int opt_double_macswap = 0;
 struct bpf_object *obj;
 struct xsknf_config config;
 
-uint32_t hash_seed = 1234;
+//uint32_t hash_seed = 1234;
 uint32_t change_key_duration = 0;
 uint16_t map_cookies[65536];
-
+uint32_t map_seeds[65536];
 
 static inline int redirect_if(int ingress_ifindex, int redirect_ifindex, struct ethhdr* eth){
 	if(ingress_ifindex == RETH1){
@@ -37,9 +37,11 @@ static inline int redirect_if(int ingress_ifindex, int redirect_ifindex, struct 
 	}
 }
 
-static __always_inline __u16 get_map_cookie(__u32 ipaddr, __u32 salt){
-	__u16 key = MurmurHash2(&ipaddr,4,salt);
-	return map_cookies[key];
+static __always_inline __u16 get_map_cookie(__u32 ipaddr){
+
+	uint16_t seed_key = ipaddr & 0xffff;
+	__u16 cookie_key = MurmurHash2(&ipaddr,4,map_seeds[seed_key]);
+	return map_cookies[cookie_key];
 }
 
 // void init_sand(int sand_len){
@@ -48,9 +50,10 @@ static __always_inline __u16 get_map_cookie(__u32 ipaddr, __u32 salt){
 // 	}
 // }
 
-void init_hash_cookies(){
+void init_global_maps(){
 	for(int i=0;i<65536;i++){
 		map_cookies[i] = i;
+		map_seeds[i] = i; 
 	}
 }
 
@@ -163,15 +166,15 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			// Other ack packet. Validate hybrid_cookie
 			else{
 				uint32_t hybrid_cookie = ntohl(ts->tsecr);
-				if(((hybrid_cookie & 0xffff) == get_map_cookie(ip->saddr,hash_seed))){
+				if(((hybrid_cookie & 0xffff) == get_map_cookie(ip->saddr))){
 					DEBUG_PRINT("Switch agent: Pass map_cookie, map cookie = %u, cal_map_cookie = %u\n"
 																				,hybrid_cookie & 0xffff
-																				,get_map_cookie(ip->saddr,hash_seed) );
+																				,get_map_cookie(ip->saddr) );
 				}
 				else{
 					DEBUG_PRINT("Switch agent: Fail map_cookie, map cookie = %u, cal_map_cookie = %u\n"
 																				,hybrid_cookie & 0xffff
-																				,get_map_cookie(ip->saddr,hash_seed) );
+																				,get_map_cookie(ip->saddr) );
 					if(change_key_duration){
 						DEBUG_PRINT("Switch agent: Change seed for %u\n",change_key_duration);
 						haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
@@ -204,9 +207,10 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			DEBUG_PRINT("Receive change seed packet!\n");
 			uint16_t cookie_key = tcp->source;
 			uint16_t new_cookie = tcp->dest;
+			uint16_t seed_key = tcp->window;
 			uint32_t new_hash_seed = tcp->seq;
-			hash_seed = new_hash_seed;
-			printf("hash_seed = %u\n",hash_seed);
+			map_seeds[seed_key] = new_hash_seed;
+			//printf("hash_seed = %u\n",hash_seed);
 			change_key_duration = tcp->ack_seq;
 			map_cookies[cookie_key] = new_cookie;
 			return -1;
@@ -341,7 +345,7 @@ int swich_agent (int argc, char **argv){
 
 	setlocale(LC_ALL, "");
 
-	init_hash_cookies();
+	init_global_maps();
 
 	//init_sand(20);
 	

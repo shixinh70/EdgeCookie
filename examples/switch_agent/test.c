@@ -104,9 +104,10 @@ double timeit(char* name, hash_function_time func, int inlen, int outlen) {
 
 	return timings[NUM_TIMINGS / 2];
 }
-unsigned long djb2(unsigned char *str, int len)
+unsigned long djb2(unsigned char *str, int len, uint32_t seed)
     {
-        unsigned long hash = 5381;
+        //5381
+        unsigned long hash = seed;
         int c;
 
         while(len--){
@@ -116,9 +117,10 @@ unsigned long djb2(unsigned char *str, int len)
 
         return hash;
     }
-unsigned long djb2a(unsigned char *str, int len)
+unsigned long djb2a(unsigned char *str, int len, uint32_t seed)
     {
-        unsigned long hash = 5381;
+        //5381
+        unsigned long hash = seed;
         int c;
 
         while(len--){
@@ -128,9 +130,9 @@ unsigned long djb2a(unsigned char *str, int len)
 
         return hash;
     }
-long sdbm(unsigned char *str, int len) 
+long sdbm(unsigned char *str, int len, uint32_t seed) 
     {
-        unsigned long hash = 0;
+        unsigned long hash = seed;
         int c;
 
         while(len--){
@@ -141,9 +143,9 @@ long sdbm(unsigned char *str, int len)
 
         return hash;
     }
-long sdbma(unsigned char *str, int len) 
+long sdbma(unsigned char *str, int len, uint32_t seed) 
     {
-        unsigned long hash = 0;
+        unsigned long hash = seed;
         int c;
 
         while(len--){
@@ -162,15 +164,17 @@ void hash_distribution(char* name,hash_function func){
     uint64_t cnt2 = 0;
     srand(time(NULL));
     uint32_t seeds[ROUND] = {0};
+    uint16_t ms16b[ROUND] = {0}; 
     for(uint32_t i =0;i<ROUND;i++){
         seeds[i] = rand();
+        ms16b[i] = rand() & 0xffff;
     }
-   
+    
     for(uint32_t i=0;i<ROUND;i++){
-        for(uint32_t j= i*65536;j< (i+1)*65536;j++){
-            uint32_t k = j ^ seeds[i];
+        for(uint32_t j= 0;j<65536;j++){
+            uint32_t k = (j | (((uint32_t)ms16b[i])<<16));
             uint32_t h = func((uint8_t*)&k,4,seeds[i]);
-            h = (h >> 16) ^ (h & 0xffff);
+            h = (h & 0xffff);
             if(array[h] == 0){
                 cnt++;
             }
@@ -185,29 +189,31 @@ void hash_distribution(char* name,hash_function func){
 }
 
 static __always_inline uint32_t djb2_perf ( const void * key, int len, uint32_t seed ){
-    return djb2((uint8_t*)key,len);
+    return djb2((uint8_t*)key,len,seed);
 }
 static __always_inline uint32_t djb2a_perf ( const void * key, int len, uint32_t seed ){
-        return djb2a((uint8_t*)key, len);
+        return djb2a((uint8_t*)key, len,seed);
 }
 static __always_inline uint32_t sdbm_perf ( const void * key, int len, uint32_t seed ){
         
-        return sdbm((uint8_t*)key,len);
+        return sdbm((uint8_t*)key,len,seed);
 
 }
 static __always_inline uint32_t sdbma_perf ( const void * key, int len, uint32_t seed ){
-        return sdbma((uint8_t*)key,len);
+        return sdbma((uint8_t*)key,len,seed);
 
 }
 static __always_inline uint32_t fnv1_perf ( const void * key, int len, uint32_t seed ){
-        return fnv_32_buf((uint8_t*)key,len);
+        return fnv_32_buf((uint8_t*)key,len,seed);
 
 }
 static __always_inline uint32_t fnv1a_perf ( const void * key, int len, uint32_t seed ){
-        return fnv_32a_buf((uint8_t*)key,len);
+        
+        return fnv_32a_buf((uint8_t*)key,len, seed);
 }
+
 static __always_inline uint32_t crc_perf ( const void * key, int len, uint32_t seed ){
-    return xcrc32(key,len,0xffff);
+    return xcrc32(key,len,seed);
 }
 
 
@@ -301,23 +307,28 @@ void hsiphash_perf_time(unsigned char* out, const unsigned char* in, int outlen,
 }
 
 void graph(){
-    for(int i=0;i<65535;i++){
-        uint32_t h = MurmurHash2(&i,4,0xffff);
-        h = (h>>16) ^ h & 0xffff;
+    
+    for(uint32_t i=0;i<65535;i++){
+        uint32_t k = i | 0xaca20000;
+        uint32_t h = fnv_32_buf(&k,4,2);
+        h = (h & 0xffff);
         printf("%d ",h);
     }
 }
 
 int main(){
-	// load_constants();
-    // hash_distribution("djb2",djb2_perf);
-    // hash_distribution("djb2a",djb2a_perf);
-    // hash_distribution("sdbm",sdbm_perf);
-    // hash_distribution("sdbma",sdbma_perf);
-    // hash_distribution("fnvla",fnv1a_perf);
-    // hash_distribution("murmur3",murmurhash3);
-    // hash_distribution("crc32",crc_perf);
-
+	load_constants();
+    hash_distribution("djb2",djb2_perf);
+    hash_distribution("djb2a",djb2a_perf);
+    hash_distribution("sdbm",sdbm_perf);
+    hash_distribution("sdbma",sdbma_perf);
+    hash_distribution("fnvla",fnv1a_perf);
+    hash_distribution("fnvl",fnv1_perf);
+    hash_distribution("murmur3",murmurhash3);
+    hash_distribution("murmur2",MurmurHash2);
+    hash_distribution("crc32",crc_perf);
+    
+    timeit ("haraka256",haraka256,32,32);
 
     timeit ("crc32",crc_perf_time,4,4);
     timeit ("murmur2",mm2_perf_time,4,4);
@@ -329,7 +340,6 @@ int main(){
     timeit ("fnv1",fnv1_perf_time,4,4);
     timeit ("fnv1a",fnv1a_perf_time,4,4);
     timeit ("hsiphash",hsiphash_perf_time,12,4);
-    timeit ("haraka256",haraka256,32,32);
-
+    //graph();
 
 }

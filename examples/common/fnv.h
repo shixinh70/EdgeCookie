@@ -58,7 +58,7 @@
 
 #if !defined(__FNV_H__)
 #define __FNV_H__
-
+#include <stdint.h>
 #include <sys/types.h>
 
 #define FNV_VERSION "5.0.2"	/* @(#) FNV Version */
@@ -73,9 +73,10 @@ typedef u_int32_t Fnv32_t;
 #define FNV1_32_INIT ((Fnv32_t)0x811c9dc5)
 #define FNV1_32A_INIT FNV1_32_INIT
 
-extern Fnv32_t fnv_32_buf(void *buf, size_t len);
+Fnv32_t fnv_32a_buf(void *buf, size_t len, uint32_t seed);
+Fnv32_t fnv_32_buf(void *buf, size_t len, uint32_t seed);
 
-extern Fnv32_t fnv_32a_buf(void *buf, size_t len);
+//extern Fnv32_t fnv_32a_buf(void *buf, size_t len);
 extern Fnv32_t fnv_32a_str(char *buf, Fnv32_t hashval);
 
 
