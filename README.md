@@ -6,7 +6,7 @@ To address both SYN flood and ACK flood attacks, we propose an architecture that
 
 When a client wants to establish a connection with the protected server, the gateway agent acts as a SYN proxy, employing SYN cookie mechanisms to perform initial client validation. If the client is deemed legitimate, the connection is forwarded to the server agent. Then the server agent establishes a connection with the server behind it, ultimately synchronizing the two independent connections.
 
-For all ACK packets sent by the server, the server agent inserts a special hybrid cookie into the TCP timestamp value filed. Due to TCP protocol specifications, when the receiver needs to reply to packets carrying TCP timestamp values, it must place the timestamp value in the timestamp echo field of the response packet. Therefore, the gateway agent can verify the timestamp echo field of ACK packets to determine whether both end-host have completed the connection establishment process, enabling packet filtering without the need to store any TCP states.
+For all ACK packets sent by the server, the server agent inserts a special hybrid cookie into the TCP timestamp value field. Due to TCP protocol specifications, when the receiver needs to reply to packets carrying TCP timestamp values, it must place the timestamp value in the timestamp echo field of the response packet. Therefore, the gateway agent can verify the timestamp echo field of ACK packets to determine whether both end-host have completed the connection establishment process, enabling packet filtering without the need to store any TCP states.
 
 # The router agent typically build on [XSNKF library](https://github.com/FedeParola/xsknf).
 
