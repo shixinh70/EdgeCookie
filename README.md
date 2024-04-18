@@ -1,4 +1,4 @@
-# HTScookie - A solution to mitigate SYN flood and ACK flood attacks by leveraging eBPF.
+# HTSCookie - A solution to mitigate SYN flood and ACK flood attacks by leveraging eBPF.
 
 TCP SYN flood is a famous DDoS attack that exploits the creation of numerous half-opened connections to exhaust resources of a server. Researchers are still actively working on resolving this issue. ACK flood, on the other hand, utilizes a large number of ACK packets carrying data to flood the server's network, causing service disruption for regular users. However, ACK flood attacks are less common compared to SYN flood attacks because they are limited by the TCP three-way handshake mechanism and cannot effectively amplify traffic like UDP reflection attacks. Therefore, it is difficult to saturate the line with ACK flood attacks. However, in 2021, Kevin Bock and others discovered vulnerabilities in many middleboxes in the network that could be exploited for reflective ACK flood attacks, with astonishing amplification factors. This makes this new type of ACK flood attack an increasingly significant threat.
 
