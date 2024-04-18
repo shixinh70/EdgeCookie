@@ -8,7 +8,7 @@ When a client wants to establish a connection with the protected server, the gat
 
 For all ACK packets sent by the server, the server agent inserts a special hybrid cookie into the TCP timestamp value field. Due to TCP protocol specifications, when the receiver needs to reply to packets carrying TCP timestamp values, it must place the timestamp value in the timestamp echo field of the response packet. Therefore, the gateway agent can verify the timestamp echo field of ACK packets to determine whether both end-host have completed the connection establishment process, enabling packet filtering without the need to store any TCP states.
 
-# The router agent typically build on [XSNKF library](https://github.com/FedeParola/xsknf).
+# The router agent typically build on [XSNKF library](https://github.com/FedeParola/xsknf)
 
 ## XSKNF - Speed up development of AF_XDP-based NFs (Moving from [XSNKF](https://github.com/FedeParola/xsknf)
 
