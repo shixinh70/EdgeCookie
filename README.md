@@ -1,4 +1,4 @@
-# HTSCookie - A solution to mitigate SYN flood and ACK flood attacks by leveraging eBPF.
+# HTSCookie - A solution to mitigate SYN flood and ACK flood attacks by leveraging eBPF
 
 TCP SYN flood is a famous DDoS attack that exploits the creation of numerous half-opened connections to exhaust resources of a server. Researchers are still actively working on resolving this issue. ACK flood, on the other hand, utilizes a large number of ACK packets carrying data to flood the server's network, causing service disruption for regular users. However, ACK flood attacks are less common compared to SYN flood attacks because they are limited by the TCP three-way handshake mechanism and cannot effectively amplify traffic like UDP reflection attacks. Therefore, it is difficult to saturate the line with ACK flood attacks. However, in 2021, Kevin Bock and others discovered vulnerabilities in many middleboxes in the network that could be exploited for reflective ACK flood attacks, with astonishing amplification factors. This makes this new type of ACK flood attack an increasingly significant threat.
 
@@ -10,7 +10,7 @@ For all ACK packets sent by the server, the server agent inserts a special hybri
 
 # The router agent typically build on [XSNKF library](https://github.com/FedeParola/xsknf).
 
-## XSKNF - Speed up development of AF_XDP-based NFs (Moving from [XSNKF](https://github.com/FedeParola/xsknf).)
+## XSKNF - Speed up development of AF_XDP-based NFs (Moving from [XSNKF](https://github.com/FedeParola/xsknf)
 
 The XSKNF library speeds up the development of AF_XDP based network functions taking care of all aspects related to AF_XDP buffers and rings management and threading aspects.
 The programmer just has to write a packet processing function that receives a single packet in input, processes it and provides a verdict.
