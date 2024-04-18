@@ -24,7 +24,7 @@ The **libelf**, **libz**, and **libmnl** libraries are required and can be insta
 sudo apt install libelf-dev zlib1g-dev libmnl-dev
 ```
 
-Run `make` in the main project folder to build the library under [./src]([./src](https://github.com/FedeParola/xsknf/tree/master/src)) and the examples under [./examples]([./examples](https://github.com/FedeParola/xsknf/tree/master/examples)).
+Run `make` in the main project folder to build the library under [./src](https://github.com/FedeParola/xsknf/tree/master/src) and the examples under [./examples](https://github.com/FedeParola/xsknf/tree/master/examples).
 
 ### Application setup
 
@@ -47,7 +47,7 @@ The following arguments are currently supported by the library:
 -w  --workers=n     Number of packet processing workers
 ```
 
-The [macswap]([./examples/macswap/](https://github.com/FedeParola/xsknf/tree/master/examples/macswap)) example provides a very basic example of how to use the library. For example it can be run in the follwing way:
+The [macswap](https://github.com/FedeParola/xsknf/tree/master/examples/macswap) example provides a very basic example of how to use the library. For example it can be run in the follwing way:
 ```
 sudo ./macswap -i ens1f0 -i ens1f1 -- -q
 ```
