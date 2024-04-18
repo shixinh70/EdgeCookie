@@ -10,8 +10,7 @@ For all ACK packets sent by the server, the server agent inserts a special hybri
 
 # The router agent typically build on [XSNKF library](https://github.com/FedeParola/xsknf).
 
-
-## XSKNF - Speed up development of AF_XDP-based NFs
+## XSKNF - Speed up development of AF_XDP-based NFs (Moving from [XSNKF](https://github.com/FedeParola/xsknf).)
 
 The XSKNF library speeds up the development of AF_XDP based network functions taking care of all aspects related to AF_XDP buffers and rings management and threading aspects.
 The programmer just has to write a packet processing function that receives a single packet in input, processes it and provides a verdict.
@@ -25,7 +24,7 @@ The **libelf**, **libz**, and **libmnl** libraries are required and can be insta
 sudo apt install libelf-dev zlib1g-dev libmnl-dev
 ```
 
-Run `make` in the main project folder to build the library under [./src](./src) and the examples under [./examples](./examples).
+Run `make` in the main project folder to build the library under [./src]([./src](https://github.com/FedeParola/xsknf/tree/master/src)) and the examples under [./examples]([./examples](https://github.com/FedeParola/xsknf/tree/master/examples)).
 
 ### Application setup
 
@@ -48,7 +47,7 @@ The following arguments are currently supported by the library:
 -w  --workers=n     Number of packet processing workers
 ```
 
-The [macswap](./examples/macswap/) example provides a very basic example of how to use the library. For example it can be run in the follwing way:
+The [macswap]([./examples/macswap/](https://github.com/FedeParola/xsknf/tree/master/examples/macswap)) example provides a very basic example of how to use the library. For example it can be run in the follwing way:
 ```
 sudo ./macswap -i ens1f0 -i ens1f1 -- -q
 ```
@@ -59,4 +58,4 @@ TODO
 
 ### Paper
 
-For the tests of the paper *Comparing User Space and In-Kernel Packet Processing for Edge Data Centers* please refer to the [tests](./tests) folder.
+For the tests of the paper *Comparing User Space and In-Kernel Packet Processing for Edge Data Centers* please refer to the [tests]([./tests](https://github.com/FedeParola/xsknf/tree/master/tests)) folder.
