@@ -10,7 +10,7 @@ For all ACK packets sent by the server, the server agent inserts a special hybri
 
 # The router agent typically build on [XSNKF library](https://github.com/FedeParola/xsknf)
 
-## XSKNF - Speed up development of AF_XDP-based NFs (Moving from [XSNKF](https://github.com/FedeParola/xsknf)
+## XSKNF - Speed up development of AF_XDP-based NFs (Moving from [XSNKF](https://github.com/FedeParola/xsknf))
 
 The XSKNF library speeds up the development of AF_XDP based network functions taking care of all aspects related to AF_XDP buffers and rings management and threading aspects.
 The programmer just has to write a packet processing function that receives a single packet in input, processes it and provides a verdict.
