@@ -139,7 +139,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                     ts->tsval ^= ts->tsecr;
                     ts->tsecr ^= ts->tsval;
                     ts->tsval ^= ts->tsecr;
-
+                    tcp->syn = 0;
                     tcp->check = 0;
 
                     
@@ -166,7 +166,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                     //DEBUG_PRINT("TC: SYNACK TO ACK! csum = %x\n",bpf_ntohs(tcp_csum_tmp));
                     tcp->check = tcp_csum_tmp;
                     DEBUG_PRINT("TC: Redirect ACK (from SYNACK) packet back to Ingress interface  \n");
-                    return bpf_redirect(16,BPF_F_INGRESS);
+                    return bpf_redirect(4,BPF_F_INGRESS);
                     
                 }
                 else if (tcp->rst){
@@ -189,7 +189,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                     uint8_t pkt_cookie_head = (bpf_ntohl(val.hybrid_cookie)) >> 30;
                     uint8_t cur_cookie_head = val.cur_cookie_head;
                     if(cur_cookie_head != pkt_cookie_head){
-                        bpf_printk("TC: Detect change seed by cookiehead, max_rtt = %u\n",max_rtt);
+                        //bpf_printk("TC: Detect change seed by cookiehead, max_rtt = %u\n",max_rtt);
                         cur_cookie_head = (cur_cookie_head + 1) %4;
                         val.cur_cookie_head = cur_cookie_head;
                         max_rtt = 0;
@@ -202,7 +202,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                         max_rtt = rtt;
                         bpf_map_update_elem(&rtt_map,&zero,&rtt,BPF_ANY);
                     }
-                    bpf_printk("TC: Max Rtt is %u ms\n",max_rtt);
+                    //bpf_printk("TC: Max Rtt is %u ms\n",max_rtt);
                     
                     val.ts_val_s = ts->tsval;
                     ts->tsval = val.hybrid_cookie;

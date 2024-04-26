@@ -283,14 +283,14 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
 
                             // Not init
                             if(val.cur_hash_seed == 0){                                
-                            bpf_printk("SERVER_IN: flow.Cur_hash_seed == 0, init hybrid cookie\n");
+                            //bpf_printk("SERVER_IN: flow.Cur_hash_seed == 0, init hybrid cookie\n");
                             hybrid_cookie = get_hybrid_cookie(val.hash_cookie,ip->saddr,map_seeds[seed_key]);
                             hybrid_cookie &= 0x3fffffff; // mask out leftest 2 bits
                             }
 
                             // Outdated
                             else{
-                                bpf_printk("SERVER_IN: Cur hybrid cookie outdated, udpate new map cookie\n");
+                                //bpf_printk("SERVER_IN: Cur hybrid cookie outdated, udpate new map cookie\n");
                                 uint32_t new_map_cookie = get_map_cookie(ip->saddr);
                                 hybrid_cookie = ((hybrid_cookie & 0xffff0000) | new_map_cookie);
                             }  
@@ -300,7 +300,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
 
                             // Update outdated hybrid cookie
                             val.hybrid_cookie = bpf_htonl(hybrid_cookie);
-                            bpf_printk("SERVER_IN: Cur hash cookie = %u\n",(hybrid_cookie >>16) & 0x3ffff);
+                            //bpf_printk("SERVER_IN: Cur hash cookie = %u\n",(hybrid_cookie >>16) & 0x3ffff);
                             
                             // Update cur_hash_seed
                             val.cur_hash_seed = map_seeds[seed_key];

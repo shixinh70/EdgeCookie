@@ -35,10 +35,10 @@
 
 
 
-__u64 u1_mac = 0x030012ac4202;
-__u64 u2_mac = 0x030013ac4202;
-__u64 reth1_mac = 0x020012ac4202;
-__u64 reth2_mac = 0x020013ac4202;
+__u64 u1_mac = 0x010000000000;
+__u64 u2_mac = 0x020000000000;
+__u64 reth1_mac = 0x110000000000;
+__u64 reth2_mac = 0x120000000000;
 
 struct common_synack_opt
 {

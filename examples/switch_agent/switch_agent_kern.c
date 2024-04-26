@@ -40,12 +40,6 @@ SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 {
 	void *data = (void *)(long)ctx->data;
 	void *data_end = (void *)(long)ctx->data_end;
-	int zero = 0;
-	struct xdp_cpu_stats *stats = bpf_map_lookup_elem(&xdp_stats, &zero);
-	if (!stats) {
-		return XDP_ABORTED;
-	}
-	stats->rx_npkts++;
 
 	/*
 	 * Need to send the at least one packet to user space for busy polling to
@@ -81,22 +75,6 @@ SEC("tc") int handle_tc(struct __sk_buff *skb)
 {
 	// void *data = (void *)(long)skb->data;
 	// void *data_end = (void *)(long)skb->data_end;
-	int zero = 0;
-
-	struct xdp_cpu_stats *stats = bpf_map_lookup_elem(&xdp_stats, &zero);
-	if (!stats) {
-		return TC_ACT_SHOT;
-	}
-	stats->tx_npkts++;
-	// struct ethhdr *eth = data;
-	// if ((void *)(eth + 1) > data_end) {
-	// 	return TC_ACT_SHOT;
-	// }
-
-	// swap_mac_addresses(data);
-	// if (global.double_macswap) {
-	// 	swap_mac_addresses_v2(data);
-	// }
 
 	return TC_ACT_OK;
 }
