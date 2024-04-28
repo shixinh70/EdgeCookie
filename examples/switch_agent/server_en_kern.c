@@ -166,7 +166,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                     //DEBUG_PRINT("TC: SYNACK TO ACK! csum = %x\n",bpf_ntohs(tcp_csum_tmp));
                     tcp->check = tcp_csum_tmp;
                     DEBUG_PRINT("TC: Redirect ACK (from SYNACK) packet back to Ingress interface  \n");
-                    return bpf_redirect(4,BPF_F_INGRESS);
+                    return bpf_redirect(2,BPF_F_INGRESS);
                     
                 }
                 else if (tcp->rst){

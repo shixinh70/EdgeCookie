@@ -119,6 +119,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
             }
 
             // Packet with ts option
+
             if(tcphdr_len >= 32){ 
                 struct tcp_opt_ts* ts;
                
@@ -137,7 +138,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     // Ack packet which TS == TS_START and no payload (Pass router's cookie check).
                     // Insert new connection 
                     DEBUG_PRINT("tsecr = %d TS_START = %d\n",tsecr, TS_START);
-                    if (tsecr == TS_START && (tcp_header_end == data_end)){
+                    if (tsecr == TS_START && (tcp_header_end == data_end) && (!(tcp->fin))){
                         DEBUG_PRINT("SERVER_IN: Packet tsecr == TS_START, and NO payload, Create conntrack\n");
                         struct map_key_t key = {
                             .src_ip = ip->saddr,
