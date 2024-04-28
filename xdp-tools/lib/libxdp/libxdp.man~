@@ -1,4 +1,4 @@
-.TH "libxdp" "3" "April  3, 2024" "v1.2.3" "libxdp - library for loading XDP programs" 
+.TH "libxdp" "3" "DATE" "VERSION" "libxdp - library for loading XDP programs" 
 
 .SH "libxdp - library for attaching XDP programs and using AF_XDP sockets"
 .PP

@@ -21,17 +21,14 @@ uint16_t map_cookies[65536];
 uint32_t map_seeds[65536];
 
 static inline int redirect_if(int ingress_ifindex, int redirect_ifindex, struct ethhdr* eth){
-	if(ingress_ifindex == RETH1){
-		__builtin_memcpy(eth->h_source, &reth1_mac,6);
-	}
-	if(ingress_ifindex == RETH2){
-		__builtin_memcpy(eth->h_source, &reth2_mac,6);
-	}
+	
 	if(redirect_ifindex == RETH1){
+		__builtin_memcpy(eth->h_source, &reth1_mac,6);
 		__builtin_memcpy(eth->h_dest, &u1_mac,6);
 		return RETH1;
 	}
 	if(redirect_ifindex == RETH2){
+		__builtin_memcpy(eth->h_source, &reth2_mac,6);
 		__builtin_memcpy(eth->h_dest, &u2_mac,6);
 		return RETH2;
 	}
@@ -60,16 +57,18 @@ void init_global_maps(){
 
 int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 {
-
 	// uint64_t timer = startTimer();
 	//struct pkt_5tuple flow = {0};
 	void *pkt_end = pkt + (*len);
 	struct ethhdr *eth = pkt;
 	struct iphdr* ip = (struct iphdr*)(eth +1);
 	struct tcphdr* tcp = (struct tcphdr*)(ip +1);
-
 	void* tcp_opt = (void*)(tcp + 1);
 
+	if(tcp->syn && tcp->fin){
+		return opt_action == ACTION_DROP ?
+		-1 : redirect_if(ingress_ifindex,(ingress_ifindex + 1) % config.num_interfaces,eth);
+	}
 	if(ingress_ifindex == 0){
 		struct pkt_5tuple flow = {
 			.src_ip = ip->saddr,
