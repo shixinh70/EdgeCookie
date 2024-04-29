@@ -31,14 +31,19 @@
 	printf(fmt, ##__VA_ARGS__)
 #define RETH1 0
 #define RETH2 1
+#define RETH3 2
+#define ATTACKER_IF 0
+#define SERVER_IF 1
+#define CLIENT_IF 2
 #define TS_START bpf_ntohl(0x01010000)
 
 
-
-__u64 u1_mac = 0x010000000000;
-__u64 u2_mac = 0x020000000000;
-__u64 reth1_mac = 0x110000000000;
-__u64 reth2_mac = 0x120000000000;
+const __u64 u1_mac = 0x010000000000; // 
+const __u64 u2_mac = 0x020000000000;
+const __u64 u3_mac = 0x030000000000;
+const __u64 reth1_mac = 0x110000000000;
+const __u64 reth2_mac = 0x120000000000;
+const __u64 reth3_mac = 0x130000000000;
 
 struct common_synack_opt
 {

@@ -7,8 +7,9 @@
 #include <linux/in.h>
 #include <bpf/bpf_endian.h>
 
-#define RETH1 4
-#define RETH2 5
+#define RETH1 8 //client
+#define RETH2 3 //server
+#define RETH3 5 //attacker
 
 struct global_data {
 	int action;
@@ -60,9 +61,12 @@ SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 
 			
 			if(ctx->ingress_ifindex == RETH1)
-				return bpf_redirect_map(&xsks, 0, XDP_PASS);
+				return bpf_redirect_map(&xsks, 2, XDP_PASS);
 			else if (ctx->ingress_ifindex == RETH2)
 				return bpf_redirect_map(&xsks, 1, XDP_PASS);
+			else{
+				return bpf_redirect_map(&xsks, 0, XDP_PASS);
+			}
 		}
 	}
 	

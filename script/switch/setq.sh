@@ -14,3 +14,4 @@ fi
 
 ethtool -L enp6s0f0 combined "$x"
 ethtool -L enp6s0f1 combined "$x"
+ethtool -L 

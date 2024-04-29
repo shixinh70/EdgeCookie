@@ -32,8 +32,32 @@ static inline int redirect_if(int ingress_ifindex, int redirect_ifindex, struct 
 		__builtin_memcpy(eth->h_dest, &u2_mac,6);
 		return RETH2;
 	}
+	if(redirect_ifindex == RETH3){
+		__builtin_memcpy(eth->h_source, &reth3_mac,6);
+		__builtin_memcpy(eth->h_dest, &u3_mac,6);
+		return RETH3;
+	}
 }
+static inline int forward(int ingress_ifindex, struct ethhdr* eth){
 
+	if (ingress_ifindex == ATTACKER_IF){
+		__builtin_memcpy(eth->h_source, &reth2_mac,6);
+		__builtin_memcpy(eth->h_dest, &u2_mac,6);
+		return SERVER_IF;
+	}
+	else if (ingress_ifindex == SERVER_IF){
+		__builtin_memcpy(eth->h_source, &reth3_mac,6);
+		__builtin_memcpy(eth->h_dest, &u3_mac,6);
+		return CLIENT_IF;
+	}
+
+	// From client
+	else{
+		__builtin_memcpy(eth->h_source, &reth2_mac,6);
+		__builtin_memcpy(eth->h_dest, &u2_mac,6);
+		return SERVER_IF;
+	}							
+}
 static __always_inline __u16 get_map_cookie(__u32 ipaddr){
 
 	uint16_t seed_key = ipaddr & 0xffff;
@@ -65,6 +89,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 	struct tcphdr* tcp = (struct tcphdr*)(ip +1);
 	void* tcp_opt = (void*)(tcp + 1);
 
+	return forward(ingress_ifindex, eth);
 	// Back door for enable busy-polling
 	if(tcp->syn && tcp->fin){
 		return opt_action == ACTION_DROP ?
