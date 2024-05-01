@@ -47,17 +47,22 @@ static inline int forward(struct ethhdr* eth, struct iphdr* ip){
 	if (ip->daddr == inet_addr(CLIENT_IP)){
 		__builtin_memcpy(eth->h_source, &client_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &client_mac_64,6);
+		
+
 		return CLIENT_R_IF;
 	}
 	else if (ip->daddr == inet_addr(SERVER_IP)){
 		__builtin_memcpy(eth->h_source, &server_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &server_mac_64,6);
+		
 		return SERVER_R_IF;
 	}
 	// TO attacker
 	else if (ip->daddr == inet_addr (ATTACKER_IP)){
 		__builtin_memcpy(eth->h_source, &attacker_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &attacker_mac_64,6);
+		
+
 		return ATTACKER_R_IF;
 	}
 	else return -1;
@@ -87,6 +92,7 @@ void init_global_maps(){
 
 int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 {
+	printf("hehe\n");
 	// uint64_t timer = startTimer();
 	//struct pkt_5tuple flow = {0};
 	void *pkt_end = pkt + (*len);
@@ -95,7 +101,8 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 	struct tcphdr* tcp = (struct tcphdr*)(ip +1);
 	void* tcp_opt = (void*)(tcp + 1);
 
-	return forward(ingress_ifindex, eth);
+	return forward(eth,ip);
+
 	// Back door for enable busy-polling
 	if(tcp->syn && tcp->fin){
 		return forward(eth,ip);
