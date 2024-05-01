@@ -95,6 +95,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 	struct tcphdr* tcp = (struct tcphdr*)(ip +1);
 	void* tcp_opt = (void*)(tcp + 1);
 
+	return forward(ingress_ifindex, eth);
 	// Back door for enable busy-polling
 	if(tcp->syn && tcp->fin){
 		return forward(eth,ip);
