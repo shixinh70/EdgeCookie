@@ -188,7 +188,7 @@ static void enter_xsks_into_map(struct bpf_object *obj)
 		for (int wrk_idx = 0; wrk_idx < conf.workers; wrk_idx++) {
 			int fd = xsk_socket__fd(workers[wrk_idx].xsks[if_idx].xsk);
 			/* TODO: support multiple workers with multiple iterfaces */
-			int key = if_idx;
+			int key = (if_idx * conf.workers) + wrk_idx;
 
 			if (bpf_map_update_elem(xsks_map, &key, &fd, 0)) {
 				fprintf(stderr, "ERROR: bpf_map_update_elem %d\n", key);

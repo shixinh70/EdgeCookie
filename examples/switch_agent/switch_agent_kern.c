@@ -7,10 +7,10 @@
 #include <linux/in.h>
 #include <bpf/bpf_endian.h>
 
-#define RETH1 8 //client
-#define RETH2 3 //server
-#define RETH3 5 //attacker
-
+#define CLIENT_R_IF 8 //client
+#define SERVER_R_IF 3 //server
+#define ATTACKER_R_IF 5 //attacker
+#define WORKERS 16
 struct global_data {
 	int action;
 	int double_macswap;
@@ -32,7 +32,7 @@ struct {
 	__uint(type, BPF_MAP_TYPE_XSKMAP);
 	__uint(key_size, sizeof(int));
 	__uint(value_size, sizeof(int));
-	__uint(max_entries, 32);
+	__uint(max_entries, 48);
 } xsks SEC(".maps");
 
 struct global_data global = {0};
@@ -60,13 +60,19 @@ SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 		if(ip->protocol == IPPROTO_TCP){
 
 			
-			if(ctx->ingress_ifindex == RETH1)
-				return bpf_redirect_map(&xsks, 2, XDP_PASS);
-			else if (ctx->ingress_ifindex == RETH2)
-				return bpf_redirect_map(&xsks, 1, XDP_PASS);
-			else{
-				return bpf_redirect_map(&xsks, 0, XDP_PASS);
+			if(ctx->ingress_ifindex == CLIENT_R_IF){
+				
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index, XDP_PASS);
 			}
+			else if (ctx->ingress_ifindex == SERVER_R_IF){
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index + WORKERS, XDP_PASS);
+
+			}
+			else if (ctx->ingress_ifindex == SERVER_R_IF)
+			{
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index + (WORKERS*2), XDP_PASS);
+			}
+			
 		}
 	}
 	
