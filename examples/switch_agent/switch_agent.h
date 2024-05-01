@@ -29,16 +29,24 @@
 #define DEBUG_PRINT(fmt, ...) \
 	if (DEBUG)                \
 	printf(fmt, ##__VA_ARGS__)
-#define RETH1 0
-#define RETH2 1
+
+#define TS_START bpf_ntohl(0x01010000)
+#define CLIENT_MAC "3c:fd:fe:b3:13:94"
+#define SERVER_MAC "3c:fd:fe:b0:f4:2c"
+#define ATTACKER_MAC ""
+#define CLIENT_R_MAC "90:e2:ba:b3:21:e0"
+#define SERVER_R_MAC "90:e2:ba:b3:21:e1"
+#define ATTACKER_R_MAC ""
+#define CLIENT_IP ("172.18.0.3")
+#define SERVER_IP ("172.19.0.3")
+#define ATTACKER_IP ("172.20.0.3")
+#define CLIENT_R_IF 0
+#define SERVER_R_IF 1
+#define ATTACKER_R_IF 2
 #define TS_START bpf_ntohl(0x01010000)
 
 
 
-__u64 u1_mac = 0x010000000000;
-__u64 u2_mac = 0x020000000000;
-__u64 reth1_mac = 0x110000000000;
-__u64 reth2_mac = 0x120000000000;
 
 struct common_synack_opt
 {

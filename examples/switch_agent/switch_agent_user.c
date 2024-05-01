@@ -19,20 +19,50 @@ struct xsknf_config config;
 uint32_t change_key_duration = 0;
 uint16_t map_cookies[65536];
 uint32_t map_seeds[65536];
+__u64 client_mac_64 ; 
+__u64 server_mac_64 ;
+__u64 attacker_mac_64 ;
+__u64 client_r_mac_64 ;
+__u64 server_r_mac_64 ;
+__u64 attacker_r_mac_64 ;
 
-static inline int redirect_if(int ingress_ifindex, int redirect_ifindex, struct ethhdr* eth){
-	
-	if(redirect_ifindex == RETH1){
-		__builtin_memcpy(eth->h_source, &reth1_mac,6);
-		__builtin_memcpy(eth->h_dest, &u1_mac,6);
-		return RETH1;
-	}
-	if(redirect_ifindex == RETH2){
-		__builtin_memcpy(eth->h_source, &reth2_mac,6);
-		__builtin_memcpy(eth->h_dest, &u2_mac,6);
-		return RETH2;
-	}
+uint64_t MACstoi(unsigned char* str){
+    int last = -1;
+    unsigned char a[6];
+    sscanf(str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx%n",
+                    a + 0, a + 1, a + 2, a + 3, a + 4, a + 5,
+                    &last);
+    return
+    (uint64_t)(a[5]) << 40 |
+    (uint64_t)(a[4]) << 32 | ( 
+        (uint32_t)(a[3]) << 24 | 
+        (uint32_t)(a[2]) << 16 |
+        (uint32_t)(a[1]) << 8 |
+        (uint32_t)(a[0]));
+    
 }
+
+static inline int forward(struct ethhdr* eth, struct iphdr* ip){
+
+	if (ip->daddr == inet_addr(CLIENT_IP)){
+		__builtin_memcpy(eth->h_source, &client_r_mac_64,6);
+		__builtin_memcpy(eth->h_dest, &client_mac_64,6);
+		return CLIENT_R_IF;
+	}
+	else if (ip->daddr == inet_addr(SERVER_IP)){
+		__builtin_memcpy(eth->h_source, &server_r_mac_64,6);
+		__builtin_memcpy(eth->h_dest, &server_mac_64,6);
+		return SERVER_R_IF;
+	}
+	// TO attacker
+	else if (ip->daddr == inet_addr (ATTACKER_IP)){
+		__builtin_memcpy(eth->h_source, &attacker_r_mac_64,6);
+		__builtin_memcpy(eth->h_dest, &attacker_mac_64,6);
+		return ATTACKER_R_IF;
+	}
+	else return -1;
+}
+
 
 static __always_inline __u16 get_map_cookie(__u32 ipaddr){
 
@@ -67,8 +97,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 
 	// Back door for enable busy-polling
 	if(tcp->syn && tcp->fin){
-		return opt_action == ACTION_DROP ?
-		-1 : redirect_if(ingress_ifindex,(ingress_ifindex + 1) % config.num_interfaces,eth);
+		return forward(eth,ip);
 	}
 	
 	if(ingress_ifindex == 0){
@@ -141,7 +170,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			tcp->syn = 1;
 			tcp->ack = 1;
 			tcp->check = cksumTcp(ip,tcp);
-			return redirect_if(ingress_ifindex,RETH1,eth);
+			return forward(eth,ip);
 		}
 		else if(tcp->ack && !(tcp->syn)){
 			struct tcp_opt_ts* ts;
@@ -197,7 +226,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 					}
 				}
 			}
-			redirect_if(ingress_ifindex,RETH2,eth);
+			return forward(eth,ip);
 			
 		}
 	}
@@ -218,8 +247,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 		}
 	}
 	// Other Pass through Router
-	return opt_action == ACTION_DROP ?
-		-1 : redirect_if(ingress_ifindex,(ingress_ifindex + 1) % config.num_interfaces,eth);
+	return forward(eth,ip);
 }
 
 
@@ -350,6 +378,15 @@ int swich_agent (int argc, char **argv){
 
 	//init_sand(20);
 	
+	client_mac_64 = MACstoi(CLIENT_MAC);
+	server_mac_64 = MACstoi(SERVER_MAC);
+	attacker_mac_64 = MACstoi(ATTACKER_MAC);
+	
+	client_r_mac_64 = MACstoi(CLIENT_R_MAC);
+	server_r_mac_64 = MACstoi(SERVER_R_MAC);
+	attacker_r_mac_64 = MACstoi(ATTACKER_R_MAC);
+
+	//printf("%llx %llx %llx %llx\n ",u1_mac,u2_mac,reth1_mac,reth2_mac);
 	load_constants();
 
 	xsknf_start_workers();
