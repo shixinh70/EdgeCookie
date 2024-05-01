@@ -44,7 +44,7 @@
 #define SERVER_R_IF 1
 #define ATTACKER_R_IF 2
 #define TS_START bpf_ntohl(0x01010000)
-
+#define HARAKA 1
 
 
 

@@ -26,6 +26,66 @@ __u64 client_r_mac_64 ;
 __u64 server_r_mac_64 ;
 __u64 attacker_r_mac_64 ;
 
+const int key0 = 0x33323130;
+const int key1 = 0x42413938;
+const int c0 = 0x70736575;
+const int c1 = 0x6e646f6d;
+const int c2 = 0x6e657261;
+const int c3 = 0x79746573;
+
+static inline uint32_t rol(uint32_t word, uint32_t shift){
+	return (word<<shift) | (word >> (32 - shift));
+}
+
+#define SIPROUND \
+	do { \
+	v0 += v1; v2 += v3; v1 = rol(v1, 5); v3 = rol(v3,8); \
+	v1 ^= v0; v3 ^= v2; v0 = rol(v0, 16); \
+	v2 += v1; v0 += v3; v1 = rol(v1, 13); v3 = rol(v3, 7); \
+	v1 ^= v2; v3 ^= v0; v2 = rol(v2, 16); \
+	} while (0)
+
+static uint32_t hsiphash(uint32_t src, uint32_t dst, uint16_t src_port, uint16_t dst_port){
+	
+	//initialization 
+	int v0 = c0 ^ key0;
+	int v1 = c1 ^ key1;
+	int v2 = c2 ^ key0;
+	int v3 = c3 ^ key1; 
+	
+	//first message 
+	v3 = v3 ^ ntohl(src);
+	SIPROUND;
+	SIPROUND;
+	v0 = v0 ^ ntohl(src); 
+
+	//second message 
+	v3 = v3 ^ ntohl(dst);
+	SIPROUND;
+	SIPROUND;
+	v0 = v0 ^ ntohl(dst); 
+
+	//third message
+	uint32_t ports = (uint32_t) dst_port << 16 | (uint32_t) src_port;  
+	v3 = v3 ^ ntohl(ports);
+	SIPROUND;
+	SIPROUND;
+	v0 = v0 ^ ntohl(ports); 
+	
+	//finalization
+	v2 = v2 ^ 0xFF; 
+	SIPROUND;
+	SIPROUND;
+	SIPROUND;
+	SIPROUND;
+
+	uint32_t hash = (v0^v1)^(v2^v3);
+	hash = (hash >> 16) ^ (hash & 0xffff);
+    return hash; 	
+}
+
+
+
 uint64_t MACstoi(unsigned char* str){
     int last = -1;
     unsigned char a[6];
@@ -161,7 +221,11 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			// Get flow's syncookie (by haraka256)
 			// Conver syn packet to synack, and put syncookie
 			uint32_t hashcookie = 0;
-			haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
+			if(HARAKA)
+				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
+			else
+				hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
+			
 			tcp->seq = hashcookie;
 			tcp->ack_seq = bpf_htonl(bpf_ntohl(rx_seq) + 1);
 			tcp->source ^= tcp->dest;
@@ -187,13 +251,17 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			// Packet for three way handshake, and client's first request which not receive corresponding ack.
 			// Can still use syncookie to validate packet  
 			if (ts->tsecr == TS_START){
-				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
+				if(HARAKA)
+					haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
+				
+				else
+					hashcookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
+
 				if(bpf_htonl(bpf_ntohl(tcp->ack_seq) -1 ) != hashcookie){
-				DEBUG_PRINT("Switch agent: Fail syncookie check!\n");
+					DEBUG_PRINT("Switch agent: Fail syncookie check!\n");
 					return -1;
 				}
 			}
-
 			// Other ack packet. Validate hybrid_cookie
 			else{
 				uint32_t hybrid_cookie = ntohl(ts->tsecr);
