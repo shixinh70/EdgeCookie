@@ -77,7 +77,7 @@ static struct worker *workers;
 static struct bpf_object *obj;
 static int egress_ebpf_program = 0;
 static int owner_shift;
-int global_workers_num;
+int global_workers_num = 1;
 
 
 static int xsk_get_xdp_stats(int fd, struct xsknf_socket_stats *stats)
@@ -188,7 +188,7 @@ static void enter_xsks_into_map(struct bpf_object *obj)
 			int fd = xsk_socket__fd(workers[wrk_idx].xsks[if_idx].xsk);
 			/* TODO: support multiple workers with multiple iterfaces */
 			int key = (if_idx * conf.workers) + wrk_idx;
-
+			
 			if (bpf_map_update_elem(xsks_map, &key, &fd, 0)) {
 				fprintf(stderr, "ERROR: bpf_map_update_elem %d\n", key);
 				exit(EXIT_FAILURE);
@@ -660,7 +660,7 @@ static void process_batch_1if(struct xsk_socket_info *xsk)
 		addr = xsk_umem__add_offset_to_addr(addr);
 		void *pkt = xsk_umem__get_data(xsk->buffer, addr);
 
-		ret = xsknf_packet_processor(pkt, &len, 0, 0);
+		ret = xsknf_packet_processor(pkt, &len, 0, xsk->worker->id);
 		if (ret == -1) {
 			/* Enqueue to drop queue */
 			to_drop[ndrop].addr = orig;
@@ -673,6 +673,7 @@ static void process_batch_1if(struct xsk_socket_info *xsk)
 	}
 
 	xsk_ring_cons__release(&xsk->rx, rcvd);
+	
 	xsk->stats.rx_npkts += rcvd;
 
 	/* Put frames of dropped packets back in the fill queue */

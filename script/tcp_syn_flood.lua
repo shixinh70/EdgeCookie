@@ -9,7 +9,7 @@ function configure(parser)
 	parser:argument("dev", "Device to transmit from."):convert(tonumber)
 	parser:option("-r --rate", "Transmit rate in Mbit/s."):default("0"):convert(tonumber)
 	parser:option("-c --core", "Number of cores."):default("1"):convert(tonumber)
-	parser:option("-s --src", "Source IP address."):default("10.0.0.1")
+	parser:option("-s --src", "Source IP address."):default("10.20.0.3")
 	parser:option("-d --dst", "Destination IP address.")
 	parser:option("--dmac", "Destination MAC address.")
 	parser:option("--sport", "Source port."):default("1000"):convert(tonumber)
@@ -55,13 +55,14 @@ function loadSlave(queue, minIp, numIps, dst, dmac, minSPort, numPorts, dPort,
 		buf:getTcpPacket():fill{ 
 			ethSrc = queue,
 			ethDst = dmac,
+			ip4Src = minIP,
 			ip4Dst = dst,
 			tcpDst = dPort,
 			tcpSyn = 1,
 			tcpSeqNumber = 1,
 			tcpWindow = 10,
 			pktLength = len - 4,
-            tcpOffset = 8
+            tcpDataOffset = 8
 
 		}
 	end)
@@ -80,15 +81,15 @@ function loadSlave(queue, minIp, numIps, dst, dmac, minSPort, numPorts, dPort,
 			local pkt = buf:getTcpPacket(ipv4)
 
 			pkt.ip4.src:set(minIp)
-			pkt.ip4.src:add(ipCounter)
+			--pkt.ip4.src:add(ipCounter)
 			pkt.tcp:setSrcPort((minSPort + portCounter) % 0xffff)
 			pkt.tcp:setNopOption(0)
             pkt.tcp:setNopOption(1)
             pkt.tcp:setTSOption(2,1234,1234)
-			ipCounter = incAndWrap(ipCounter, numIps)
-			if ipCounter == 0 then
-				portCounter = incAndWrap(portCounter, numPorts)
-			end
+			-- ipCounter = incAndWrap(ipCounter, numIps)
+			-- if ipCounter == 0 then
+			-- 	portCounter = incAndWrap(portCounter, numPorts)
+			-- end
 		end 
 
 		bufs:offloadTcpChecksums(ipv4)

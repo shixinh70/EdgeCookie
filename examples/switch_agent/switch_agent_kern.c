@@ -59,19 +59,19 @@ SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 		}
 		
 		if(ip->protocol == IPPROTO_TCP){
-
+			
 			
 			if(ctx->ingress_ifindex == CLIENT_R_IF){
 				
 				return bpf_redirect_map(&xsks, ctx->rx_queue_index, XDP_PASS);
 			}
 			else if (ctx->ingress_ifindex == SERVER_R_IF){
-				return bpf_redirect_map(&xsks, ctx->rx_queue_index + global.workers_num, XDP_PASS);
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index + global.workers_num -1, XDP_PASS);
 
 			}
-			else if (ctx->ingress_ifindex == SERVER_R_IF)
+			else if (ctx->ingress_ifindex == ATTACKER_R_IF)
 			{
-				return bpf_redirect_map(&xsks, ctx->rx_queue_index + (global.workers_num*2), XDP_PASS);
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index, XDP_PASS);
 			}
 			
 		}

@@ -188,7 +188,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 	
 	// uint64_t timer = startTimer();
 	//struct pkt_5tuple flow = {0};
-	printf("worker_id = %d\n",worker_id);
+	
 	if(opt_drop==1){
 		return -1;
 	}
