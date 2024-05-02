@@ -10,10 +10,11 @@
 #define CLIENT_R_IF 8 //client
 #define SERVER_R_IF 3 //server
 #define ATTACKER_R_IF 5 //attacker
-#define WORKERS 16
+
 struct global_data {
 	int action;
 	int double_macswap;
+	int workers_num;
 };
 
 struct xdp_cpu_stats {
@@ -65,12 +66,12 @@ SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 				return bpf_redirect_map(&xsks, ctx->rx_queue_index, XDP_PASS);
 			}
 			else if (ctx->ingress_ifindex == SERVER_R_IF){
-				return bpf_redirect_map(&xsks, ctx->rx_queue_index + WORKERS, XDP_PASS);
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index + global.workers_num, XDP_PASS);
 
 			}
 			else if (ctx->ingress_ifindex == SERVER_R_IF)
 			{
-				return bpf_redirect_map(&xsks, ctx->rx_queue_index + (WORKERS*2), XDP_PASS);
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index + (global.workers_num*2), XDP_PASS);
 			}
 			
 		}

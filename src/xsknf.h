@@ -19,7 +19,7 @@ extern "C" {
  * Custom packet processing function defined by the user.
  * Returns the ifindex toward which redirect the packet or -1 to drop it
  */
-int xsknf_packet_processor(void *pkt, unsigned* len, unsigned ingress_ifindex);
+int xsknf_packet_processor(void *pkt, unsigned* len, unsigned ingress_ifindex, unsigned worker_id);
 
 struct xsknf_config {
 	char *interfaces[XSKNF_MAX_INTERFACES];

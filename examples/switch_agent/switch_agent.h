@@ -44,7 +44,7 @@
 #define SERVER_R_IF 1
 #define ATTACKER_R_IF 2
 #define TS_START bpf_ntohl(0x01010000)
-#define HARAKA 1
+
 
 
 
@@ -63,6 +63,7 @@ struct eth_mac_t
 struct global_data {
 	int action;
 	int double_macswap;
+	int workers_num;
 };
 
 struct pkt_5tuple {
@@ -70,7 +71,7 @@ struct pkt_5tuple {
   uint32_t dst_ip;
   uint16_t src_port;
   uint16_t dst_port;
-  uint32_t sand[5];
+  uint32_t salt[5];
 } __attribute__((packed));
 
 // Redirect from ingress_ifindex to redirect_ifindex

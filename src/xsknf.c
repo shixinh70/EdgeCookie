@@ -1,7 +1,6 @@
 #define _GNU_SOURCE
 
 #include "xsknf.h"
-
 #include <arpa/inet.h>
 #include <bpf/bpf.h>
 #include <errno.h>
@@ -37,8 +36,6 @@
 #define DEFAULT_BIND_FLAGS (XDP_USE_NEED_WAKEUP)
 #define POLL_TIMEOUT_MS 1000
 int total_duration = 0;
-
-
 static size_t umem_bufsize;
 static int stop_workers = 0;
 static struct xsknf_config conf;
@@ -80,6 +77,8 @@ static struct worker *workers;
 static struct bpf_object *obj;
 static int egress_ebpf_program = 0;
 static int owner_shift;
+int global_workers_num;
+
 
 static int xsk_get_xdp_stats(int fd, struct xsknf_socket_stats *stats)
 {
@@ -511,7 +510,7 @@ static void process_batch(struct xsk_socket_info *xsks, unsigned ifindex)
 		void *pkt = xsk_umem__get_data(rx_xsk->buffer, addr);
 
 		
-		ret = xsknf_packet_processor(pkt, &len, ifindex);
+		ret = xsknf_packet_processor(pkt, &len, ifindex, xsks->worker->id);
 		if (ret == -1) {
 			/* Enqueue to drop queue */
 			to_drop[ndrop].addr = orig;
@@ -661,7 +660,7 @@ static void process_batch_1if(struct xsk_socket_info *xsk)
 		addr = xsk_umem__add_offset_to_addr(addr);
 		void *pkt = xsk_umem__get_data(xsk->buffer, addr);
 
-		ret = xsknf_packet_processor(pkt, &len, 0);
+		ret = xsknf_packet_processor(pkt, &len, 0, 0);
 		if (ret == -1) {
 			/* Enqueue to drop queue */
 			to_drop[ndrop].addr = orig;
@@ -844,6 +843,7 @@ int xsknf_parse_args(int argc, char **argv, struct xsknf_config *config)
 			}
 			break;
 		case 'w':
+			global_workers_num  = atoi(optarg);
 			config->workers = atoi(optarg);
 			if (config->workers < 1) {
 				fprintf(stderr, "ERROR: Invalid number of workers %u",

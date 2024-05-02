@@ -18,12 +18,12 @@ fi
 
 if [ "$option" -eq 0 ]; then
  
-    echo "Turning off xdpgeneric and deleting tc qdisc for $eth"
+    echo "Turning off xdpdrv and deleting tc qdisc for $eth"
     ip link set "$eth" xdpdrv off
     tc qdisc del dev "$eth" clsact
 elif [ "$option" -eq 1 ]; then
  
-    echo "Setting xdpgeneric object and adding tc qdisc for $eth"
+    echo "Setting xdpdrv object and adding tc qdisc for $eth"
     ip link set "$eth" xdpdrv object "server_in_kern.o"
     tc qdisc add dev "$eth" clsact
     tc filter add dev "$eth" egress bpf direct-action obj "server_en_kern.o" sec prog

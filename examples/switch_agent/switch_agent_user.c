@@ -5,15 +5,36 @@ enum action {
 	ACTION_DROP,
 	ACTION_PASS
 };
-
+enum hash_options{
+	HASH_OFF,
+	HARAKA,
+	HSIPHASH,
+	
+};
+enum tcpcsum_options{
+	CSUM_OFF,
+	CSUM_ON
+	
+};
+enum timestamp_options{
+	TS_OFF,
+	TS_ON,
+};
 static int benchmark_done;
 static int opt_quiet;
 static int opt_extra_stats;
 static int opt_app_stats;
+static int opt_drop;
+static int opt_pressure;
 static enum action opt_action = ACTION_REDIRECT;
-static int opt_double_macswap = 0;
+static enum hash_options hash_option = HARAKA;
+static enum tcpcsum_options tcpcsum_option = CSUM_ON;
+static enum timestamp_options timestamp_option = TS_ON;
+
 struct bpf_object *obj;
 struct xsknf_config config;
+struct pkt_5tuple flows[16];
+struct common_synack_opt sa_opts[16];
 
 //uint32_t hash_seed = 1234;
 uint32_t change_key_duration = 0;
@@ -25,13 +46,31 @@ __u64 attacker_mac_64 ;
 __u64 client_r_mac_64 ;
 __u64 server_r_mac_64 ;
 __u64 attacker_r_mac_64 ;
-
 const int key0 = 0x33323130;
 const int key1 = 0x42413938;
 const int c0 = 0x70736575;
 const int c1 = 0x6e646f6d;
 const int c2 = 0x6e657261;
 const int c3 = 0x79746573;
+extern int global_workers_num;
+
+static void init_salt(){
+	for(int j =0 ;j< 5; j++){
+		for(int i =0 ;i< global_workers_num;i++){
+			int rand_num = (rand() & 0xffffffff);
+			flows[i].salt[j] = rand_num; 
+		}
+	}
+}
+static void init_saopts(){
+	for(int i=0; i< global_workers_num;i++){
+		sa_opts[i].MSS = 0x18020402;
+		sa_opts[i].SackOK = 0x0204;
+		sa_opts[i].ts.tsval = TS_START;
+		sa_opts[i].ts.kind = 8;
+		sa_opts[i].ts.length = 1;
+	}
+}
 
 static inline uint32_t rol(uint32_t word, uint32_t shift){
 	return (word<<shift) | (word >> (32 - shift));
@@ -103,7 +142,7 @@ uint64_t MACstoi(unsigned char* str){
 }
 
 static inline int forward(struct ethhdr* eth, struct iphdr* ip){
-
+	
 	if (ip->daddr == inet_addr(CLIENT_IP)){
 		__builtin_memcpy(eth->h_source, &client_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &client_mac_64,6);
@@ -136,12 +175,6 @@ static __always_inline __u16 get_map_cookie(__u32 ipaddr){
 	return map_cookies[cookie_key];
 }
 
-// void init_sand(int sand_len){
-// 	for(int i=0;i<sand_len/4;i++){
-// 		global_salt[i] = rand();
-// 	}
-// }
-
 void init_global_maps(){
 	for(int i=0;i<65536;i++){
 		map_cookies[i] = i;
@@ -150,43 +183,46 @@ void init_global_maps(){
 }
 
 
-int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
+int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, unsigned worker_id)
 {
-	printf("hehe\n");
+	
 	// uint64_t timer = startTimer();
 	//struct pkt_5tuple flow = {0};
+	printf("worker_id = %d\n",worker_id);
+	if(opt_drop==1){
+		return -1;
+	}
+	
 	void *pkt_end = pkt + (*len);
 	struct ethhdr *eth = pkt;
 	struct iphdr* ip = (struct iphdr*)(eth +1);
 	struct tcphdr* tcp = (struct tcphdr*)(ip +1);
 	void* tcp_opt = (void*)(tcp + 1);
-
-	return forward(eth,ip);
-	// Back door for enable busy-polling
-	if(tcp->syn && tcp->fin){
-		return forward(eth,ip);
-	}
+	//return forward(eth,ip);
+	// // Back door for enable busy-polling
+	// if(tcp->syn && tcp->fin){
+	// 	return forward(eth,ip);
+	// }
 	
 	if(ingress_ifindex == 0){
-		struct pkt_5tuple flow = {
-			.src_ip = ip->saddr,
-			.dst_ip = ip->daddr,
-			.src_port = tcp->source,
-			.dst_port = tcp->source,
-			.sand = {0x728ea123,0x8874adee,0x129033ae,0xff12e561,0x17abc223}
-		};
+		flows[worker_id].src_ip = ip->saddr;
+	    flows[worker_id].dst_ip = ip->daddr;
+		flows[worker_id].src_port = tcp->source;
+		flows[worker_id].dst_port = tcp->source;
+
 
 		if(tcp->syn && (!tcp->ack)) {
-
 			// Find out timestamp offset
 			struct tcp_opt_ts* ts;
-			int opt_ts_offset = parse_timestamp(tcp); 
-			if(opt_ts_offset < 0) return -1;
-			ts = (tcp_opt + opt_ts_offset);
-			if((void*)(ts + 1) > pkt_end){
-				return -1;
-			}
 
+			if(tcpcsum_option == CSUM_ON);{
+				int opt_ts_offset = parse_timestamp(tcp); 
+				if(opt_ts_offset < 0) return -1;
+				ts = (tcp_opt + opt_ts_offset);
+				if((void*)(ts + 1) > pkt_end){
+					return -1;
+				}
+			}
 			// Store rx pkt's tsval, then pur to ts.ecr
 			uint32_t rx_tsval = ts->tsval;
 
@@ -195,15 +231,11 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			int delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_synack_opt)) - (tcp->doff*4);
 			__u16 old_ip_totlen = ip->tot_len;
 			__u16 new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
-			struct common_synack_opt sa_opt = {
-				.MSS = 0x18020402,
-				.SackOK = 0x0204,
-				.ts.tsval = TS_START,
-				.ts.tsecr = rx_tsval,
-				.ts.kind = 8,
-				.ts.length = 10
-			};
-			__builtin_memcpy(tcp_opt,&sa_opt,sizeof(struct common_synack_opt));
+
+
+			sa_opts[worker_id].ts.tsecr = rx_tsval;
+			
+			__builtin_memcpy(tcp_opt,&sa_opts[worker_id],sizeof(struct common_synack_opt));
 
 			// Update length information 
 			ip->tot_len = new_ip_totlen;
@@ -227,9 +259,9 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			// Get flow's syncookie (by haraka256)
 			// Conver syn packet to synack, and put syncookie
 			uint32_t hashcookie = 0;
-			if(HARAKA)
-				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
-			else
+			if(hash_option == HARAKA)
+				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
+			else if (hash_option == HSIPHASH)
 				hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
 			
 			tcp->seq = hashcookie;
@@ -240,7 +272,11 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 
 			tcp->syn = 1;
 			tcp->ack = 1;
-			tcp->check = cksumTcp(ip,tcp);
+			if(tcpcsum_option == CSUM_ON);
+				tcp->check = cksumTcp(ip,tcp);
+
+			if(opt_pressure == 1)
+				return -1;
 			return forward(eth,ip);
 		}
 		else if(tcp->ack && !(tcp->syn)){
@@ -258,7 +294,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 			// Can still use syncookie to validate packet  
 			if (ts->tsecr == TS_START){
 				if(HARAKA)
-					haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
+					haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
 				
 				else
 					hashcookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
@@ -282,7 +318,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 																				,get_map_cookie(ip->saddr) );
 					if(change_key_duration){
 						DEBUG_PRINT("Switch agent: Change seed for %u\n",change_key_duration);
-						haraka256((uint8_t*)&hashcookie, (uint8_t*)&flow, 4 , 32);
+						haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
 						hashcookie = (hashcookie >> 16) ^ (hashcookie & 0xffff);
 						if(((hybrid_cookie >> 16) & 0x3fff) == (hashcookie & 0x3fff)){
 							DEBUG_PRINT("Switch agent: Pass hash_cookie\n");
@@ -328,7 +364,11 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex)
 
 static struct option long_options[] = {
 	{"action", required_argument, 0, 'c'},
-	{"double-macswap", no_argument, 0, 'd'},
+	{"hash-type", required_argument, 0, 'h'},
+	{"tcp-csum", required_argument, 0, 's'},
+	{"timestamp", required_argument, 0, 't'},
+	{"pressure", required_argument, 0, 'p'},
+	{"drop", no_argument, 0, 'd'},
 	{"quiet", no_argument, 0, 'q'},
 	{"extra-stats", no_argument, 0, 'x'},
 	{"app-stats", no_argument, 0, 'a'},
@@ -340,11 +380,15 @@ static void usage(const char *prog)
 	const char *str =
 		"  Usage: %s [XSKNF_OPTIONS] -- [APP_OPTIONS]\n"
 		"  App options:\n"
-		"  -c, --action		REDIRECT, DROP packets or PASS to network stack (default REDIRECT).\n"
-		"  -d, --double-macswap	Perform a double macswap on the packet.\n"
-		"  -q, --quiet		Do not display any stats.\n"
-		"  -x, --extra-stats	Display extra statistics.\n"
-		"  -a, --app-stats	Display application (syscall) statistics.\n"
+		"  -c, --action			'REDIRECT', 'DROP' packets or 'PASS' to network stack (default REDIRECT).\n"
+		"  -h, --hash-type		'HARAKA', 'HSIPHASH', 'OFF' for hash function of the Hash cookie.\n"
+		"  -s, --tcp-csum 		'ON', 'OFF', Turn on/off recompute TCP csum.\n"
+		"  -t, --timestamp 		'ON', 'OFF', Turn on/off parsing timestamp.\n"
+		"  -p, --pressure 		Receive a SYN packet and caculate syncookie then DROP!\n"
+		"  -d, --drop 			Only drop packet in packet proccessor.\n"
+		"  -q, --quiet			Do not display any stats.\n"
+		"  -x, --extra-stats		Display extra statistics.\n"
+		"  -a, --app-stats		Display application (syscall) statistics.\n"
 		"\n";
 	fprintf(stderr, str, prog);
 
@@ -356,7 +400,7 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 	int option_index, c;
 
 	for (;;) {
-		c = getopt_long(argc, argv, "c:dqxa", long_options, &option_index);
+		c = getopt_long(argc, argv, "c:h:s:t:pdqxa", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -373,8 +417,45 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 				usage(basename(app_path));
 			}
 			break;
+
+		case 'h':
+			if (!strcmp(optarg, "HARAKA")) {
+				hash_option = HARAKA;
+			} else if (!strcmp(optarg, "HSIPHASH")) {
+				hash_option = HSIPHASH;
+			} else if (!strcmp(optarg, "OFF")) {
+				hash_option = HASH_OFF;
+			} else {
+				fprintf(stderr, "ERROR: invalid action %s\n", optarg);
+				usage(basename(app_path));
+			}
+			break;
+
+		case 's':
+			if (!strcmp(optarg, "ON")) {
+				tcpcsum_option = CSUM_ON;
+			} else if (!strcmp(optarg, "OFF")) {
+				tcpcsum_option = CSUM_OFF;
+			} else {
+				fprintf(stderr, "ERROR: invalid action %s\n", optarg);
+				usage(basename(app_path));
+			}
+			break;	
+		case 't':
+			if (!strcmp(optarg, "ON")) {
+				timestamp_option = TS_ON;
+			} else if (!strcmp(optarg, "OFF")) {
+				timestamp_option = TS_OFF;
+			} else {
+				fprintf(stderr, "ERROR: invalid action %s\n", optarg);
+				usage(basename(app_path));
+			}
+			break;
+		case 'p':
+			opt_pressure = 1;
+			break;		
 		case 'd':
-			opt_double_macswap = 1;
+			opt_drop = 1;
 			break;
 		case 'q':
 			opt_quiet = 1;
@@ -429,6 +510,7 @@ int swich_agent (int argc, char **argv){
 		}
 
 		struct global_data global;
+		global.workers_num = global_workers_num;
 		switch (opt_action) {
 		case ACTION_REDIRECT:
 			global.action = XDP_TX;
@@ -440,7 +522,7 @@ int swich_agent (int argc, char **argv){
 			global.action = XDP_PASS;
 			break;
 		}
-		global.double_macswap = opt_double_macswap;
+		//global.double_macswap = opt_double_macswap;
 		if (bpf_map_update_elem(global_fd, &zero, &global, 0)) {
 			fprintf(stderr, "ERROR: unable to initialize eBPF global data\n");
 			exit(EXIT_FAILURE);
@@ -451,8 +533,9 @@ int swich_agent (int argc, char **argv){
 
 	init_global_maps();
 
-	//init_sand(20);
-	
+	init_salt();
+	init_saopts();
+
 	client_mac_64 = MACstoi(CLIENT_MAC);
 	server_mac_64 = MACstoi(SERVER_MAC);
 	attacker_mac_64 = MACstoi(ATTACKER_MAC);

@@ -17,6 +17,7 @@ const uint32_t synack_4_mask_2 = syn_2_mask_2;
 
 __u32 parse_timestamp(struct tcphdr *tcp)
 {
+	
 	void* tcp_opt = (void*)(tcp + 1);
 	int opt_ts_offset = -1;
 	void *opt_end = (void *)tcp + (tcp->doff * 4);
