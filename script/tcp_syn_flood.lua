@@ -88,7 +88,7 @@ function loadSlave(queue, minIp, numIps, dst, dmac, minSPort, numPorts, dPort,
             pkt.tcp:setTSOption(2,1234,1234)
 			-- ipCounter = incAndWrap(ipCounter, numIps)
 			-- if ipCounter == 0 then
-			-- 	portCounter = incAndWrap(portCounter, numPorts)
+			portCounter = incAndWrap(portCounter, numPorts)
 			-- end
 		end 
 
