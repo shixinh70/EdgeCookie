@@ -262,8 +262,8 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			if(hash_option == HARAKA)
 				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
 			else if (hash_option == HSIPHASH)
-				hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
-				
+				hashcookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
+			
 			tcp->seq = hashcookie;
 			tcp->ack_seq = bpf_htonl(bpf_ntohl(rx_seq) + 1);
 			tcp->source ^= tcp->dest;
