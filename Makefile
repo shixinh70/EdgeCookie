@@ -26,7 +26,7 @@ LIBBPF_INCLUDE_DIR := $(LIBBPF_DIR)/root/usr/include
 
 # Allows to pass additional cflags from the make command
 override CFLAGS += -I./src -I./headers -I$(LIBXDP_INCLUDE_DIR) \
-				   -I$(LIBBPF_INCLUDE_DIR) -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer
+				   -I$(LIBBPF_INCLUDE_DIR) -I./examples/common -O0 -flto -march=native  -fomit-frame-pointer
 
 # Configure library paths
 XSKNF_DIR    := ./src
