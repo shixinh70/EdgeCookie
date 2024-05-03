@@ -1,8 +1,12 @@
 #!/bin/bash
 
-echo 2 | sudo tee /sys/class/net/enp6s0f0/napi_defer_hard_irqs
-echo 2 | sudo tee /sys/class/net/enp6s0f1/napi_defer_hard_irqs
-echo 2 | sudo tee /sys/class/net/enp6s0f2/napi_defer_hard_irqs
-echo 200000 | sudo tee /sys/class/net/enp6s0f0/gro_flush_timeout
-echo 200000 | sudo tee /sys/class/net/enp6s0f1/gro_flush_timeout
-echo 200000 | sudo tee /sys/class/net/enp6s0f2/gro_flush_timeout
+if [ $# -lt 1 ]; then
+  echo "usage: ${0} ifname [finame2 ...]"
+  exit 1
+fi
+
+for ifname in "$@"; do
+  echo $ifname
+  echo 0 | sudo tee /sys/class/net/$ifname/napi_defer_hard_irqs
+  echo 0 | sudo tee /sys/class/net/$ifname/gro_flush_timeout
+done

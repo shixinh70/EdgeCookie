@@ -1,8 +1,27 @@
+
 #!/bin/bash
 
-echo 2 | sudo tee /sys/class/net/enp6s0f0/napi_defer_hard_irqs
-echo 2 | sudo tee /sys/class/net/enp6s0f1/napi_defer_hard_irqs
-echo 2 | sudo tee /sys/class/net/enp6s0f2/napi_defer_hard_irqs
-echo 200000 | sudo tee /sys/class/net/enp6s0f0/gro_flush_timeout
-echo 200000 | sudo tee /sys/class/net/enp6s0f1/gro_flush_timeout
-echo 200000 | sudo tee /sys/class/net/enp6s0f2/gro_flush_timeout
+NPROC=$(nproc)
+
+if [ $# -lt 2 ]; then
+  echo "usage: ${0} cores ifname [finame2 ...]"
+  exit 1
+fi
+
+i=0
+ifaces=""
+for ifname in "$@"; do
+  if [ $i -eq 0 ]; then
+    ((i+=1))
+    continue
+  fi
+
+  sudo ethtool -K $ifname ntuple off
+  sudo ethtool -L $ifname combined $1
+  ifaces="$ifaces $ifname"
+
+  ((i+=1))
+done
+
+sudo killall irqbalance
+sudo $(dirname "$0")/set_irq_affinity.sh "$ifaces"
