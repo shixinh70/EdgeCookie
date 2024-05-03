@@ -1,8 +1,5 @@
 #include "switch_agent.h"
 
-
-
-
 enum action {
 	ACTION_REDIRECT,
 	ACTION_DROP,
@@ -129,7 +126,7 @@ static uint32_t hsiphash(uint32_t src, uint32_t dst, uint16_t src_port, uint16_t
 
 
 
-uint64_t MACstoi(unsigned char* str){
+static uint64_t MACstoi(unsigned char* str){
     int last = -1;
     unsigned char a[6];
     sscanf(str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx%n",
@@ -145,7 +142,19 @@ uint64_t MACstoi(unsigned char* str){
     
 }
 
-static inline int forward(struct ethhdr* eth, struct iphdr* ip){
+
+static void init_MAC(){
+	
+	client_mac_64 = MACstoi(CLIENT_MAC);
+	server_mac_64 = MACstoi(SERVER_MAC);
+	attacker_mac_64 = MACstoi(ATTACKER_MAC);
+	
+	client_r_mac_64 = MACstoi(CLIENT_R_MAC);
+	server_r_mac_64 = MACstoi(SERVER_R_MAC);
+	attacker_r_mac_64 = MACstoi(ATTACKER_R_MAC);
+}
+
+static __always_inline int forward(struct ethhdr* eth, struct iphdr* ip){
 	
 	if (ip->daddr == inet_addr(CLIENT_IP)){
 		__builtin_memcpy(eth->h_source, &client_r_mac_64,6);
@@ -179,7 +188,7 @@ static __always_inline __u16 get_map_cookie(__u32 ipaddr){
 	return map_cookies[cookie_key];
 }
 
-void init_global_maps(){
+static void init_global_maps(){
 	for(int i=0;i<65536;i++){
 		map_cookies[i] = i;
 		map_seeds[i] = i; 
@@ -189,9 +198,6 @@ void init_global_maps(){
 
 int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, unsigned worker_id)
 {
-	
-	// uint64_t timer = startTimer();
-	//struct pkt_5tuple flow = {0};
 	
 	if(opt_drop==1){
 		return -1;
@@ -542,19 +548,9 @@ int swich_agent (int argc, char **argv){
 	setlocale(LC_ALL, "");
 
 	init_global_maps();
-
 	init_salt();
 	init_saopts();
-
-	client_mac_64 = MACstoi(CLIENT_MAC);
-	server_mac_64 = MACstoi(SERVER_MAC);
-	attacker_mac_64 = MACstoi(ATTACKER_MAC);
-	
-	client_r_mac_64 = MACstoi(CLIENT_R_MAC);
-	server_r_mac_64 = MACstoi(SERVER_R_MAC);
-	attacker_r_mac_64 = MACstoi(ATTACKER_R_MAC);
-
-	//printf("%llx %llx %llx %llx\n ",u1_mac,u2_mac,reth1_mac,reth2_mac);
+	init_MAC();
 	load_constants();
 
 	xsknf_start_workers();
@@ -562,14 +558,11 @@ int swich_agent (int argc, char **argv){
 	init_stats();
 	while (!benchmark_done) {
 		if(change_key_duration){
-			//printf("Sleep %u ms....\n",change_key_duration);
 			struct timespec sleep_time = {0};
 			sleep_time.tv_nsec = (change_key_duration + 1) * MSTONS;
-			//pthread_mutex_lock(&dutation_key);
 			nanosleep(&sleep_time, NULL);
-			//printf("wake up\n");
 			change_key_duration = 0;
-			//pthread_mutex_unlock(&dutation_key);
+			
 		}
 
 		sleep(1);

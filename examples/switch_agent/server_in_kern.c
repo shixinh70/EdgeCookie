@@ -1,9 +1,9 @@
 #include "server.h"
 uint8_t init = 0;
-//__u16 map_cookies[65536];
-//__u32 map_seeds[65536];
+__u16 map_cookies[65536];
+__u32 map_seeds[65536];
 __u32 dropcnt ;
-//__u32 hash_seed = 1234;
+__u32 hash_seed = 1234;
 __u32 testcnt ;
 char _license[] SEC("license") = "GPL";
 
