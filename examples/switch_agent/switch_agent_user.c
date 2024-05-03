@@ -29,6 +29,7 @@ static int opt_extra_stats;
 static int opt_app_stats;
 static int opt_drop;
 static int opt_pressure;
+static int opt_forward;
 static enum action opt_action = ACTION_REDIRECT;
 static enum hash_options hash_option = HARAKA;
 static enum tcpcsum_options tcpcsum_option = CSUM_ON;
@@ -201,12 +202,11 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 	struct iphdr* ip = (struct iphdr*)(eth +1);
 	struct tcphdr* tcp = (struct tcphdr*)(ip +1);
 	void* tcp_opt = (void*)(tcp + 1);
-	//return forward(eth,ip);
-	// // Back door for enable busy-polling
-	// if(tcp->syn && tcp->fin){
-	// 	return forward(eth,ip);
-	// }
+	if(opt_forward){
+		return forward(eth,ip);
+	}
 	
+
 	if(ingress_ifindex == 0){
 		flows[worker_id].src_ip = ip->saddr;
 	    flows[worker_id].dst_ip = ip->daddr;
@@ -217,15 +217,19 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 		if(tcp->syn && (!tcp->ack)) {
 			// Find out timestamp offset
 			struct tcp_opt_ts* ts;
-
-			if(tcpcsum_option == CSUM_ON);{
-				int opt_ts_offset = parse_timestamp(tcp); 
-				if(opt_ts_offset < 0) return -1;
-				ts = (tcp_opt + opt_ts_offset);
-				if((void*)(ts + 1) > pkt_end){
-					return -1;
-				}
+			int opt_ts_offset = 0;
+			if(timestamp_option == TS_ON){
+				opt_ts_offset = parse_timestamp(tcp); 
 			}
+			else{
+				opt_ts_offset == 2;
+			}
+			if(opt_ts_offset < 0) return -1;
+			ts = (tcp_opt + opt_ts_offset);
+			if((void*)(ts + 1) > pkt_end){
+				return -1;
+			}
+			
 			// Store rx pkt's tsval, then pur to ts.ecr
 			uint32_t rx_tsval = ts->tsval;
 
@@ -275,9 +279,8 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 
 			tcp->syn = 1;
 			tcp->ack = 1;
-			if(tcpcsum_option == CSUM_ON);
+			if(tcpcsum_option == CSUM_ON)
 				tcp->check = cksumTcp(ip,tcp);
-
 			if(opt_pressure == 1)
 				return -1;
 			return forward(eth,ip);
@@ -388,6 +391,7 @@ static void usage(const char *prog)
 		"  -s, --tcp-csum 		'ON', 'OFF', Turn on/off recompute TCP csum.\n"
 		"  -t, --timestamp 		'ON', 'OFF', Turn on/off parsing timestamp.\n"
 		"  -p, --pressure 		Receive a SYN packet and caculate syncookie then DROP!\n"
+		"  -f, --foward			Only foward packet in packet proccessor\n"
 		"  -d, --drop 			Only drop packet in packet proccessor.\n"
 		"  -q, --quiet			Do not display any stats.\n"
 		"  -x, --extra-stats		Display extra statistics.\n"
@@ -403,7 +407,7 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 	int option_index, c;
 
 	for (;;) {
-		c = getopt_long(argc, argv, "c:h:s:t:pdqxa", long_options, &option_index);
+		c = getopt_long(argc, argv, "c:h:s:t:pdqxaf", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -459,6 +463,9 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 			break;		
 		case 'd':
 			opt_drop = 1;
+			break;
+		case 'f':
+			opt_forward = 1;
 			break;
 		case 'q':
 			opt_quiet = 1;
