@@ -21,7 +21,7 @@ while true; do
    
     rx_packets=$(echo "$stats" | awk '$1 == "rx_packets:" {print $2}')
     tx_packets=$(echo "$stats" | awk '$1 == "tx_packets:" {print $2}')
-    rx_dropped_packets=$(echo "$stats" | awk '$1 == "rx_dropped:" {print $2}')
+    rx_dropped_packets=$(echo "$stats" | awk '$1 == "port.rx_dropped:" {print $2}')
     tx_dropped_packets=$(echo "$stats" | awk '$1 == "tx_dropped:" {print $2}')
     #rx_missed_errors=$(echo "$stats" | awk '/rx_missed_errors/{print $2}')
 

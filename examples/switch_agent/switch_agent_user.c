@@ -217,7 +217,11 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 	struct iphdr* ip = (struct iphdr*)(eth +1);
 	struct tcphdr* tcp = (struct tcphdr*)(ip +1);
 	void* tcp_opt = (void*)(tcp + 1);
+	
 	if(opt_forward){
+		ip->saddr ^= ip->daddr;
+		ip->daddr ^= ip->saddr;
+		ip->saddr ^= ip->daddr;
 		return forward(eth,ip);
 	}
 	

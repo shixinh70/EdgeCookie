@@ -24,6 +24,7 @@
 #include "murmur.h"
 #include "timeit.h"
 #include "pthread.h"
+
 #define MSTONS 1000000
 #define DEBUG 0
 #define DEBUG_PRINT(fmt, ...) \
@@ -36,7 +37,7 @@
 #define ATTACKER_MAC "3c:fd:fe:04:be:c2"
 #define CLIENT_R_MAC "3c:fd:fe:05:49:64"
 #define SERVER_R_MAC "3c:fd:fe:05:49:60"
-#define ATTACKER_R_MAC "3c:fd:fe:04:2b:c2"
+#define ATTACKER_R_MAC "3c:fd:fe:04:55:e2"
 #define CLIENT_IP ("10.18.0.3")
 #define SERVER_IP ("10.19.0.3")
 #define ATTACKER_IP ("10.20.0.3")
@@ -44,8 +45,6 @@
 #define SERVER_R_IF 1
 #define ATTACKER_R_IF 0
 #define TS_START bpf_ntohl(0x01010000)
-
-
 
 
 struct common_synack_opt
