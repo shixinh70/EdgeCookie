@@ -302,6 +302,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 				tcp->check = cksumTcp(ip,tcp);
 			if(opt_pressure == 1)
 				return -1;
+
 			return forward(eth,ip);
 		}
 		else if(tcp->ack && !(tcp->syn)){

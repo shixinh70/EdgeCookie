@@ -34,10 +34,10 @@
 #define TS_START bpf_ntohl(0x01010000)
 #define CLIENT_MAC "3c:fd:fe:05:dc:22"
 #define SERVER_MAC "3c:fd:fe:04:35:e2"
-#define ATTACKER_MAC "3c:fd:fe:04:be:c2"
+#define ATTACKER_MAC "00:8c:fa:f7:59:ca"
 #define CLIENT_R_MAC "3c:fd:fe:05:49:64"
 #define SERVER_R_MAC "3c:fd:fe:05:49:60"
-#define ATTACKER_R_MAC "3c:fd:fe:04:55:e2"
+#define ATTACKER_R_MAC "3c:fd:fe:56:00:02"
 #define CLIENT_IP ("10.18.0.3")
 #define SERVER_IP ("10.19.0.3")
 #define ATTACKER_IP ("10.20.0.3")
