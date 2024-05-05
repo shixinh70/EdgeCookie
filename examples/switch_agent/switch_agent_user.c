@@ -53,6 +53,11 @@ const int c0 = 0x70736575;
 const int c1 = 0x6e646f6d;
 const int c2 = 0x6e657261;
 const int c3 = 0x79746573;
+
+uint32_t client_ip;
+uint32_t server_ip;
+uint32_t attacker_ip;
+
 extern int global_workers_num;
 
 static void init_salt(){
@@ -72,7 +77,11 @@ static void init_saopts(){
 		sa_opts[i].ts.length = 1;
 	}
 }
-
+static void init_ip(){
+	client_ip = inet_addr (CLIENT_IP);
+	server_ip = inet_addr (SERVER_IP);
+	attacker_ip = inet_addr (ATTACKER_IP);
+}
 static inline uint32_t rol(uint32_t word, uint32_t shift){
 	return (word<<shift) | (word >> (32 - shift));
 }
@@ -156,21 +165,21 @@ static void init_MAC(){
 
 static __always_inline int forward(struct ethhdr* eth, struct iphdr* ip){
 	
-	if (ip->daddr == inet_addr(CLIENT_IP)){
+	if (ip->daddr == client_ip){
 		__builtin_memcpy(eth->h_source, &client_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &client_mac_64,6);
 		
 
 		return CLIENT_R_IF;
 	}
-	else if (ip->daddr == inet_addr(SERVER_IP)){
+	else if (ip->daddr == server_ip){
 		__builtin_memcpy(eth->h_source, &server_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &server_mac_64,6);
 		
 		return SERVER_R_IF;
 	}
 	// TO attacker
-	else if (ip->daddr == inet_addr (ATTACKER_IP)){
+	else if (ip->daddr == attacker_ip){
 		__builtin_memcpy(eth->h_source, &attacker_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &attacker_mac_64,6);
 		
@@ -551,6 +560,7 @@ int swich_agent (int argc, char **argv){
 	init_salt();
 	init_saopts();
 	init_MAC();
+	init_ip();
 	load_constants();
 
 	xsknf_start_workers();
