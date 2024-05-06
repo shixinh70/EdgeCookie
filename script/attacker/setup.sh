@@ -2,8 +2,6 @@
 
 interface=$(ip addr show | grep "inet 10.20.0.3" | awk '{print $NF}')
 
-cd ~
-
 # Update apt and install dependencies
 sudo apt update
 sudo apt-get install -y build-essential cmake linux-headers-$(uname -r) pciutils libnuma-dev libtbb-dev

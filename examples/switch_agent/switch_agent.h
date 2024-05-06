@@ -24,7 +24,7 @@
 #include "murmur.h"
 #include "timeit.h"
 #include "pthread.h"
-
+#include "fnv.h"
 #define MSTONS 1000000
 #define DEBUG 0
 #define DEBUG_PRINT(fmt, ...) \

@@ -27,6 +27,7 @@ static int opt_app_stats;
 static int opt_drop;
 static int opt_pressure;
 static int opt_forward;
+static int opt_change_key;
 static enum action opt_action = ACTION_REDIRECT;
 static enum hash_options hash_option = HARAKA;
 static enum tcpcsum_options tcpcsum_option = CSUM_ON;
@@ -129,7 +130,6 @@ static uint32_t hsiphash(uint32_t src, uint32_t dst, uint16_t src_port, uint16_t
 	SIPROUND;
 
 	uint32_t hash = (v0^v1)^(v2^v3);
-	hash = (hash >> 16) ^ (hash & 0xffff);
     return hash; 	
 }
 
@@ -196,7 +196,12 @@ static __always_inline __u16 get_map_cookie(__u32 ipaddr){
 	__u16 cookie_key = MurmurHash2(&ipaddr,4,map_seeds[seed_key]);
 	return map_cookies[cookie_key];
 }
+static __always_inline __u16 get_map_cookie_fnv(__u32 ipaddr){
 
+	uint16_t seed_key = ipaddr & 0xffff;
+	__u16 cookie_key = fnv_32_buf(&ipaddr,4,map_seeds[seed_key]);
+	return map_cookies[cookie_key];
+}
 static void init_global_maps(){
 	for(int i=0;i<65536;i++){
 		map_cookies[i] = i;
@@ -319,10 +324,10 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			// Packet for three way handshake, and client's first request which not receive corresponding ack.
 			// Can still use syncookie to validate packet  
 			if (ts->tsecr == TS_START){
-				if(HARAKA)
+				if(hash_option == HARAKA)
 					haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
 				
-				else
+				else if (hash_option == HSIPHASH)
 					hashcookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
 
 				if(bpf_htonl(bpf_ntohl(tcp->ack_seq) -1 ) != hashcookie){
@@ -333,19 +338,23 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			// Other ack packet. Validate hybrid_cookie
 			else{
 				uint32_t hybrid_cookie = ntohl(ts->tsecr);
-				if(((hybrid_cookie & 0xffff) == get_map_cookie(ip->saddr))){
+				if(((hybrid_cookie & 0xffff) == get_map_cookie_fnv(ip->saddr))){
 					DEBUG_PRINT("Switch agent: Pass map_cookie, map cookie = %u, cal_map_cookie = %u\n"
 																				,hybrid_cookie & 0xffff
-																				,get_map_cookie(ip->saddr) );
+																				,get_map_cookie_fnv(ip->saddr) );
 				}
 				else{
 					DEBUG_PRINT("Switch agent: Fail map_cookie, map cookie = %u, cal_map_cookie = %u\n"
 																				,hybrid_cookie & 0xffff
-																				,get_map_cookie(ip->saddr) );
-					if(change_key_duration){
+																				,get_map_cookie_fnv(ip->saddr) );
+					if(change_key_duration | opt_change_key){
 						DEBUG_PRINT("Switch agent: Change seed for %u\n",change_key_duration);
-						haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
-						hashcookie = (hashcookie >> 16) ^ (hashcookie & 0xffff);
+						if(hash_option == HARAKA)
+							haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
+						if(hash_option == HSIPHASH)
+							hashcookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
+							
+						hashcookie = (hashcookie >> 16) ^ (hashcookie & 0xffff);	
 						if(((hybrid_cookie >> 16) & 0x3fff) == (hashcookie & 0x3fff)){
 							DEBUG_PRINT("Switch agent: Pass hash_cookie\n");
 							//printf("pass hash cookie %u %u %u %u\n",flow.src_ip,flow.dst_ip,flow.src_port,flow.dst_port);
@@ -393,7 +402,8 @@ static struct option long_options[] = {
 	{"hash-type", required_argument, 0, 'h'},
 	{"tcp-csum", required_argument, 0, 's'},
 	{"timestamp", required_argument, 0, 't'},
-	{"pressure", required_argument, 0, 'p'},
+	{"change-key",no_argument,0, 'k'},
+	{"pressure", no_argument, 0, 'p'},
 	{"drop", no_argument, 0, 'd'},
 	{"quiet", no_argument, 0, 'q'},
 	{"extra-stats", no_argument, 0, 'x'},
@@ -410,6 +420,7 @@ static void usage(const char *prog)
 		"  -h, --hash-type		'HARAKA', 'HSIPHASH', 'OFF' for hash function of the Hash cookie.\n"
 		"  -s, --tcp-csum 		'ON', 'OFF', Turn on/off recompute TCP csum.\n"
 		"  -t, --timestamp 		'ON', 'OFF', Turn on/off parsing timestamp.\n"
+		"  -k  --change-key     Enable switch_agent to validate two cookies.\n"
 		"  -p, --pressure 		Receive a SYN packet and caculate syncookie then DROP!\n"
 		"  -f, --foward			Only foward packet in packet proccessor\n"
 		"  -d, --drop 			Only drop packet in packet proccessor.\n"
@@ -478,6 +489,9 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 				usage(basename(app_path));
 			}
 			break;
+		case 'k':
+			opt_change_key = 1;
+			break;		
 		case 'p':
 			opt_pressure = 1;
 			break;		
