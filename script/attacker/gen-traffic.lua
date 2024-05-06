@@ -4,8 +4,8 @@ local device = require "device"
 local stats  = require "stats"
 local log    = require "log"
 
-local ETH_SRC = "00:8c:fa:f7:59:ca"
-local ETH_DST = "3c:fd:fe:56:00:02"
+local ETH_SRC = "00:00:00:00:00:03"
+local ETH_DST = "00:00:00:00:00:13"
 
 function configure(parser)
 	parser:description("Generates traffic.")
