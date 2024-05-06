@@ -157,7 +157,7 @@ static __always_inline __u16 ip_checksum_diff(
 	return csum_fold_helper(csum);
 }
 
-static inline __u32 rol(__u32 word, __u32 shift)
+static __always_inline __u32 rol(__u32 word, __u32 shift)
 {
 	return (word << shift) | (word >> (32 - shift));
 }
@@ -430,17 +430,20 @@ static inline __u32 parse_timestamp(struct hdr_cursor *nh,
 				opt++;
 				continue;
 			}
+
+            // Other options's next byte is length
 			if (opt + 2 > opt_end || opt + 2 > data_end)
 			{
 				return -1;
 			}
 			opt_len = *(opt + 1);
 
-			// option 2 ---> MSS(4B)
+			// Skip not timestamp option.
 			if (*opt != 8)
 			{
 				opt += opt_len;
 			}
+            // Timstamp option
 			else
 			{
 				ts = (struct tcp_opt_ts*)opt;
