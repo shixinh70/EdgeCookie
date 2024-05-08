@@ -38,9 +38,9 @@ XSKNF_TARGET := $(XSKNF_DIR)/libxsknf.a
 EXAMPLES := switch_agent/switch_agent			\
 			switch_agent/server_in			\
 			switch_agent/server_en			\
-			# firewall/firewall 			\
-			# load_balancer/load_balancer	\
-			# checksummer/checksummer		\
+			smartcookie/smartcookie 			\
+			smartcookie/server_in	\
+			smartcookie/server_en		\
 			# lbfw/lbfw					\
 			# test_memory/test_memory
 
@@ -60,7 +60,11 @@ EXAMPLES_COMMON  := $(EXAMPLES_DIR)/common/statistics.o \
 					$(EXAMPLES_DIR)/common/murmur.o\
 					$(EXAMPLES_DIR)/common/timeit.o\
 					$(EXAMPLES_DIR)/common/timestamp.o\
-					$(EXAMPLES_DIR)/common/csum.o
+					$(EXAMPLES_DIR)/common/csum.o\
+					$(EXAMPLES_DIR)/common/bloom.o\
+					$(EXAMPLES_DIR)/common/bitutil.o\
+					$(EXAMPLES_DIR)/common/hashf.o
+					
 
 EXAMPLES_COMMON_TEST  := 	$(EXAMPLES_DIR)/common/haraka.o\
 							$(EXAMPLES_DIR)/common/murmur.o\

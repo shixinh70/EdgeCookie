@@ -34,8 +34,6 @@
 uint16_t map_cookies[65536];
 uint32_t map_seeds[65536];
 
-
-
 // SYN
 // MSS, SackOk, Timestamp
 const __u64 syn_1_mask = 0x0008000400000002;
@@ -159,10 +157,7 @@ static __always_inline __u16 ip_checksum_diff(
 	return csum_fold_helper(csum);
 }
 
-static __always_inline __u32 rol(__u32 word, __u32 shift)
-{
-	return (word << shift) | (word >> (32 - shift));
-}
+
 
 
 struct hdr_cursor

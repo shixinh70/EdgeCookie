@@ -35,7 +35,6 @@
 #define FRAMES_PER_SOCKET (1 << FRAMES_PER_SOCKET_SHIFT)  // 4096
 #define DEFAULT_BIND_FLAGS (XDP_USE_NEED_WAKEUP)
 #define POLL_TIMEOUT_MS 1000
-int total_duration = 0;
 static size_t umem_bufsize;
 static int stop_workers = 0;
 static struct xsknf_config conf;

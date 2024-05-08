@@ -1,4 +1,4 @@
-#include "switch_agent.h"
+#include "smartcookie.h"
 
 enum action {
 	ACTION_REDIRECT,
@@ -28,6 +28,10 @@ static int opt_drop;
 static int opt_pressure;
 static int opt_forward;
 static int opt_change_key;
+static int opt_tcpoption ;
+static int opt_add_connection = 1;
+#define CONNECTION_NUM 700000
+uint32_t drop_num;
 static enum action opt_action = ACTION_REDIRECT;
 static enum hash_options hash_option = HARAKA;
 static enum tcpcsum_options tcpcsum_option = CSUM_ON;
@@ -37,11 +41,7 @@ struct bpf_object *obj;
 struct xsknf_config config;
 struct pkt_5tuple flows[16];
 struct common_synack_opt sa_opts[16];
-
-//uint32_t hash_seed = 1234;
-uint32_t change_key_duration = 0;
-uint16_t map_cookies[65536];
-uint32_t map_seeds[65536];
+bloom_filter* bf_p;
 __u64 client_mac_64 ; 
 __u64 server_mac_64 ;
 __u64 attacker_mac_64 ;
@@ -83,6 +83,17 @@ static void init_ip(){
 	server_ip = inet_addr (SERVER_IP);
 	attacker_ip = inet_addr (ATTACKER_IP);
 }
+
+static void add_bf(){
+    int len = 12;
+    uint8_t flow[len];
+	for(int i =0;i<CONNECTION_NUM;i++){
+        for(int i =0 ;i <len; i++)
+            flow[i] = rand()&0xff;
+        bloom_filter_put(bf_p,&flow,len);
+    }
+}
+
 static inline uint32_t rol(uint32_t word, uint32_t shift){
 	return (word<<shift) | (word >> (32 - shift));
 }
@@ -190,25 +201,6 @@ static __always_inline int forward(struct ethhdr* eth, struct iphdr* ip){
 }
 
 
-static __always_inline __u16 get_map_cookie(__u32 ipaddr){
-
-	uint16_t seed_key = ipaddr & 0xffff;
-	__u16 cookie_key = MurmurHash2(&ipaddr,4,map_seeds[seed_key]);
-	return map_cookies[cookie_key];
-}
-static __always_inline __u16 get_map_cookie_fnv(__u32 ipaddr){
-
-	uint16_t seed_key = ipaddr & 0xffff;
-	__u16 cookie_key = fnv_32_buf(&ipaddr,4,map_seeds[seed_key]);
-	return map_cookies[cookie_key];
-}
-static void init_global_maps(){
-	for(int i=0;i<65536;i++){
-		map_cookies[i] = i;
-		map_seeds[i] = i; 
-	}
-}
-
 
 int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, unsigned worker_id)
 {
@@ -216,181 +208,180 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 	if(opt_drop==1){
 		return -1;
 	}
-	
+	bool in_bf = false;
 	void *pkt_end = pkt + (*len);
 	struct ethhdr *eth = pkt;
-	struct iphdr* ip = (struct iphdr*)(eth +1);
-	struct tcphdr* tcp = (struct tcphdr*)(ip +1);
+    struct iphdr* ip = NULL;
+    struct tcphdr* tcp = NULL;
+
+    if(ntohs(eth->h_proto) == ETH_P_IP){
+	    ip = (struct iphdr*)(eth +1);
+        if (ip->protocol == IPPROTO_TCP){
+            tcp = (struct tcphdr*)(ip +1);
+        }
+    }
+    if(!tcp){
+        return -1;
+    }
+    if(tcp->ece){
+        printf("ece\n");
+    }
+
+    struct tcp_opt_ts* ts = NULL;
 	void* tcp_opt = (void*)(tcp + 1);
-	
+
 	if(opt_forward){
 		ip->saddr ^= ip->daddr;
 		ip->daddr ^= ip->saddr;
 		ip->saddr ^= ip->daddr;
 		return forward(eth,ip);
 	}
-	
+    if(tcp->doff >=8){
+        int opt_ts_offset = 0;
+        if(timestamp_option == TS_ON)
+            opt_ts_offset = parse_timestamp(tcp); 
+        else
+            opt_ts_offset == 2;
+        
+        if(opt_ts_offset < 0) return -1;
 
+        ts = (tcp_opt + opt_ts_offset);
+        if((void*)(ts + 1) > pkt_end){
+            return -1;
+        }
+    }
 	if(ingress_ifindex == 0){
+
 		flows[worker_id].src_ip = ip->saddr;
 	    flows[worker_id].dst_ip = ip->daddr;
 		flows[worker_id].src_port = tcp->source;
 		flows[worker_id].dst_port = tcp->source;
 
-
+        
 		if(tcp->syn && (!tcp->ack)) {
-			// Find out timestamp offset
-			struct tcp_opt_ts* ts;
-			int opt_ts_offset = 0;
-			if(timestamp_option == TS_ON){
-				opt_ts_offset = parse_timestamp(tcp); 
-			}
-			else{
-				opt_ts_offset == 2;
-			}
-			if(opt_ts_offset < 0) return -1;
-			ts = (tcp_opt + opt_ts_offset);
-			if((void*)(ts + 1) > pkt_end){
-				return -1;
-			}
-			
-			// Store rx pkt's tsval, then pur to ts.ecr
-			uint32_t rx_tsval = ts->tsval;
+            __u16 old_ip_totlen = 0;
+            __u16 new_ip_totlen = 0;
+            int delta = 0;
 
-			// Remove old tcp option part and replace to common_syn_ack option.
-			// Then adjust the packet length
-			int delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_synack_opt)) - (tcp->doff*4);
-			__u16 old_ip_totlen = ip->tot_len;
-			__u16 new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
+            // Deal with option
+            if(opt_tcpoption && ts){
+                // Store rx pkt's tsval, then pur to ts.ecr
+                uint32_t rx_tsval = ts->tsval;
+
+                // Remove old tcp option part and replace to common_syn_ack option.
+                // Then adjust the packet length
+                delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_synack_opt)) - (tcp->doff*4);
+                old_ip_totlen = ip->tot_len;
+                new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
 
 
-			sa_opts[worker_id].ts.tsecr = rx_tsval;
-			
-			__builtin_memcpy(tcp_opt,&sa_opts[worker_id],sizeof(struct common_synack_opt));
+                sa_opts[worker_id].ts.tsecr = rx_tsval;
+                sa_opts[worker_id].ts.tsval = htonl((uint32_t)clock());
+                __builtin_memcpy(tcp_opt,&sa_opts[worker_id],sizeof(struct common_synack_opt));
 
-			// Update length information 
-			ip->tot_len = new_ip_totlen;
-			tcp->doff += delta/4 ;
-			(*len) += delta;
+                // Update length information 
+            }
 
-			// Modify iphdr
-			ip->saddr ^= ip->daddr;
-			ip->daddr ^= ip->saddr;
-			ip->saddr ^= ip->daddr;
-			
-			// since we modify ip.totalen. We need to update ip_csum
-			__u32 ip_csum = ~csum_unfold(ip->check);
-			ip_csum = csum_add(ip_csum,~old_ip_totlen);
-			ip_csum = csum_add(ip_csum,new_ip_totlen);
-			ip->check = ~csum_fold(ip_csum);
-			
-			
-			__u32 rx_seq = tcp->seq;
+            // turn off all option
+            else{
+                delta = (int)(sizeof(struct tcphdr)) - (tcp->doff*4);
+                old_ip_totlen = ip->tot_len;
+                new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
+            }
 
-			// Get flow's syncookie (by haraka256)
-			// Conver syn packet to synack, and put syncookie
-			uint32_t hashcookie = 0;
-			if(hash_option == HARAKA)
-				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
-			else if (hash_option == HSIPHASH)
-				hashcookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
-			
-			tcp->seq = hashcookie;
-			tcp->ack_seq = bpf_htonl(bpf_ntohl(rx_seq) + 1);
-			tcp->source ^= tcp->dest;
-			tcp->dest ^= tcp->source;
-			tcp->source ^= tcp->dest;
+            ip->tot_len = new_ip_totlen;
+            tcp->doff += delta/4 ;
+            (*len) += delta;
 
-			tcp->syn = 1;
-			tcp->ack = 1;
-			if(tcpcsum_option == CSUM_ON)
-				tcp->check = cksumTcp(ip,tcp);
-			if(opt_pressure == 1)
-				return -1;
+            // Modify iphdr
+            ip->saddr ^= ip->daddr;
+            ip->daddr ^= ip->saddr;
+            ip->saddr ^= ip->daddr;
 
-			return forward(eth,ip);
+            // since we modify ip.totalen. We need to update ip_csum
+            __u32 ip_csum = ~csum_unfold(ip->check);
+            ip_csum = csum_add(ip_csum,~old_ip_totlen);
+            ip_csum = csum_add(ip_csum,new_ip_totlen);
+            ip->check = ~csum_fold(ip_csum);
+            
+            
+            __u32 rx_seq = tcp->seq;
+
+            // Get flow's syncookie (by haraka256)
+            // Conver syn packet to synack, and put syncookie
+            uint32_t hashcookie = 0;
+            if(hash_option == HARAKA)
+                haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
+            else if (hash_option == HSIPHASH){
+                hashcookie = hsiphash(ip->daddr,ip->saddr,tcp->source,tcp->dest);
+
+            }
+            
+            tcp->seq = hashcookie;
+            tcp->ack_seq = bpf_htonl(bpf_ntohl(rx_seq) + 1);
+            tcp->source ^= tcp->dest;
+            tcp->dest ^= tcp->source;
+            tcp->source ^= tcp->dest;
+
+            tcp->syn = 1;
+            tcp->ack = 1;
+            if(tcpcsum_option == CSUM_ON)
+                tcp->check = cksumTcp(ip,tcp);
+            if(opt_pressure == 1)
+                return -1;
+
+            return forward(eth,ip);
 		}
+        
+        // if ack, check bf, if no, check syncookie, if pass tag, else drop.
 		else if(tcp->ack && !(tcp->syn)){
-			struct tcp_opt_ts* ts;
-			int opt_ts_offset = parse_timestamp(tcp); 
-			if(opt_ts_offset < 0) return -1;
-			ts = (tcp_opt + opt_ts_offset);
-			if((void*)(ts + 1) > pkt_end){
-				return -1;
-			}
-			uint32_t hashcookie = 0;
-			// printf("%u\n",map_seeds[(ip->saddr & 0xffff)]);
-			// if ts.ecr =TS_START
-			// Packet for three way handshake, and client's first request which not receive corresponding ack.
-			// Can still use syncookie to validate packet  
-			if (ts->tsecr == TS_START){
-				if(hash_option == HARAKA)
-					haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
-				
-				else if (hash_option == HSIPHASH)
-					hashcookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
+            
+            // If in bloomfilter
+            in_bf = bloom_filter_test(bf_p, &flows[worker_id],12);
+            if (in_bf)
+                return forward(eth,ip);
+            
+            else{   
+                // validate syncookie
+                uint32_t syncookie = 0;
+                if(hash_option == HARAKA)
+                    haraka256((uint8_t*)&syncookie, (uint8_t*)&flows[worker_id], 4 , 32);
+                else if (hash_option == HSIPHASH)
+                    syncookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
+                if(bpf_htonl(bpf_ntohl(tcp->ack_seq) -1 ) != syncookie){
+                    printf("drop: %u\n",++drop_num);
+                    return -1;
+                }
+                tcp->ece = 1; //tag the packet
+                bloom_filter_put(bf_p,&flows[worker_id],12);
 
-				if(bpf_htonl(bpf_ntohl(tcp->ack_seq) -1 ) != hashcookie){
-					DEBUG_PRINT("Switch agent: Fail syncookie check!\n");
-					return -1;
-				}
-			}
-			// Other ack packet. Validate hybrid_cookie
-			else{
-				uint32_t hybrid_cookie = ntohl(ts->tsecr);
-				if(((hybrid_cookie & 0xffff) == get_map_cookie_fnv(ip->saddr))){
-					DEBUG_PRINT("Switch agent: Pass map_cookie, map cookie = %u, cal_map_cookie = %u\n"
-																				,hybrid_cookie & 0xffff
-																				,get_map_cookie_fnv(ip->saddr) );
-				}
-				else{
-					DEBUG_PRINT("Switch agent: Fail map_cookie, map cookie = %u, cal_map_cookie = %u\n"
-																				,hybrid_cookie & 0xffff
-																				,get_map_cookie_fnv(ip->saddr) );
-					if(change_key_duration | opt_change_key){
-						DEBUG_PRINT("Switch agent: Change seed for %u\n",change_key_duration);
-						if(hash_option == HARAKA)
-							haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
-						if(hash_option == HSIPHASH)
-							hashcookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
-							
-						hashcookie = (hashcookie >> 16) ^ (hashcookie & 0xffff);	
-						if(((hybrid_cookie >> 16) & 0x3fff) == (hashcookie & 0x3fff)){
-							DEBUG_PRINT("Switch agent: Pass hash_cookie\n");
-							//printf("pass hash cookie %u %u %u %u\n",flow.src_ip,flow.dst_ip,flow.src_port,flow.dst_port);
-						}
-						else{
-							//printf("fail hash cookie %u %u %u %u\n",flow.src_ip,flow.dst_ip,flow.src_port,flow.dst_port);
-							DEBUG_PRINT("Switch agent: Fail hash_cookie, Drop packet\n");
-							return -1;
-						}
-					}
-					else{
-						//DEBUG_PRINT("%u\n",change_key_duration);
-						DEBUG_PRINT("Switch agent: Drop packet\n");
-						return -1;
-					}
-				}
-			}
-			return forward(eth,ip);
-			
+                return forward(eth,ip);   
+            }
 		}
 	}
-
-	// Ingress from router eth2 (outbound)
-	else{ 
+	// Ingress from router eth2 (outbound) 
+	else{
+        // Packet sent from server agent
 		if(tcp->ece){
-			DEBUG_PRINT("Receive change seed packet!\n");
-			uint16_t cookie_key = tcp->source;
-			uint16_t new_cookie = tcp->dest;
-			uint16_t seed_key = tcp->window;
-			uint32_t new_hash_seed = tcp->seq;
-			map_seeds[seed_key] = new_hash_seed;
-			//printf("hash_seed = %u\n",hash_seed);
-			change_key_duration = tcp->ack_seq;
-			map_cookies[cookie_key] = new_cookie;
-			return -1;
-		}
+            printf("%u\n",ingress_ifindex);
+            printf("receive ece\n");
+            flows[worker_id].src_ip = ip->daddr;
+            flows[worker_id].dst_ip = ip->saddr;
+            flows[worker_id].src_port = tcp->dest;
+            flows[worker_id].dst_port = tcp->source;
+            bloom_filter_put(bf_p,&flows[worker_id],4);
+            return -1;
+        }
+        else if (tcp->ack){
+            if(ts){
+                uint32_t old_ts_val = ts->tsval;
+                ts->tsval = htonl((uint32_t)clock());
+                __u32 tcp_csum = ~csum_unfold(tcp->check);
+                tcp_csum = csum_add(tcp_csum,~old_ts_val);
+                tcp_csum = csum_add(tcp_csum,ts->tsval);
+                tcp->check = ~csum_fold(tcp_csum);
+            }
+        }
 	}
 	// Other Pass through Router
 	return forward(eth,ip);
@@ -531,7 +522,7 @@ int swich_agent (int argc, char **argv){
 	signal(SIGTERM, int_exit);
 	signal(SIGABRT, int_exit);
 	signal(SIGUSR1, int_usr);
-
+    srand(time(NULL));
 	xsknf_parse_args(argc, argv, &config);
 	strcpy(config.tc_progname, "handle_tc");
 	xsknf_init(&config, &obj);
@@ -540,7 +531,7 @@ int swich_agent (int argc, char **argv){
 
 	if (config.working_mode & MODE_XDP) {
 		struct bpf_map *global_map = bpf_object__find_map_by_name(obj,
-				"switch_a.bss");
+				"smartcoo.bss");
 		if (!global_map) {
 			fprintf(stderr, "ERROR: unable to retrieve eBPF global data\n");
 			exit(EXIT_FAILURE);
@@ -574,25 +565,18 @@ int swich_agent (int argc, char **argv){
 	}
 
 	setlocale(LC_ALL, "");
-
-	init_global_maps();
+    bf_p = bloom_filter_new(3*1024*1024, 3, djb2,sdbm,mm2);
 	init_salt();
 	init_saopts();
 	init_MAC();
 	init_ip();
 	load_constants();
-
 	xsknf_start_workers();
-
+    if(opt_add_connection){
+        add_bf();
+    }
 	init_stats();
 	while (!benchmark_done) {
-		if(change_key_duration){
-			struct timespec sleep_time = {0};
-			sleep_time.tv_nsec = (change_key_duration + 1) * MSTONS;
-			nanosleep(&sleep_time, NULL);
-			change_key_duration = 0;
-			
-		}
 
 		sleep(1);
 		if (!opt_quiet) {
