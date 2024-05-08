@@ -438,7 +438,7 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 	int option_index, c;
 
 	for (;;) {
-		c = getopt_long(argc, argv, "c:h:s:t:pdqxaf", long_options, &option_index);
+		c = getopt_long(argc, argv, "c:h:s:t:kpdqxaf", long_options, &option_index);
 		if (c == -1)
 			break;
 

@@ -19,7 +19,6 @@
 #include <linux/tcp.h>
 #include <bpf/bpf_endian.h>
 #include "timestamp.h"
-#include "haraka.h"
 #include "csum.h"
 #include "murmur.h"
 #include "timeit.h"

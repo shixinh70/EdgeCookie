@@ -1,25 +1,6 @@
 #include "smartcookie.h"
 
-enum action {
-	ACTION_REDIRECT,
-	ACTION_DROP,
-	ACTION_PASS
-};
-enum hash_options{
-	HASH_OFF,
-	HARAKA,
-	HSIPHASH,
-	
-};
-enum tcpcsum_options{
-	CSUM_OFF,
-	CSUM_ON
-	
-};
-enum timestamp_options{
-	TS_OFF,
-	TS_ON,
-};
+
 static int benchmark_done;
 static int opt_quiet;
 static int opt_extra_stats;
@@ -29,18 +10,15 @@ static int opt_pressure;
 static int opt_forward;
 static int opt_change_key;
 static int opt_tcpoption ;
-static int opt_add_connection = 1;
-#define CONNECTION_NUM 700000
+static int opt_add_connection ;
+
 uint32_t drop_num;
-static enum action opt_action = ACTION_REDIRECT;
-static enum hash_options hash_option = HARAKA;
-static enum tcpcsum_options tcpcsum_option = CSUM_ON;
-static enum timestamp_options timestamp_option = TS_ON;
 
 struct bpf_object *obj;
 struct xsknf_config config;
 struct pkt_5tuple flows[16];
 struct common_synack_opt sa_opts[16];
+
 bloom_filter* bf_p;
 __u64 client_mac_64 ; 
 __u64 server_mac_64 ;
@@ -48,6 +26,7 @@ __u64 attacker_mac_64 ;
 __u64 client_r_mac_64 ;
 __u64 server_r_mac_64 ;
 __u64 attacker_r_mac_64 ;
+
 const int key0 = 0x33323130;
 const int key1 = 0x42413938;
 const int c0 = 0x70736575;
@@ -61,14 +40,6 @@ uint32_t attacker_ip;
 
 extern int global_workers_num;
 
-static void init_salt(){
-	for(int j =0 ;j< 5; j++){
-		for(int i =0 ;i< global_workers_num;i++){
-			int rand_num = (rand() & 0xffffffff);
-			flows[i].salt[j] = rand_num; 
-		}
-	}
-}
 static void init_saopts(){
 	for(int i=0; i< global_workers_num;i++){
 		sa_opts[i].MSS = 0x18020402;
@@ -83,17 +54,15 @@ static void init_ip(){
 	server_ip = inet_addr (SERVER_IP);
 	attacker_ip = inet_addr (ATTACKER_IP);
 }
-
 static void add_bf(){
     int len = 12;
     uint8_t flow[len];
-	for(int i =0;i<CONNECTION_NUM;i++){
+	for(int i =0;i<opt_add_connection;i++){
         for(int i =0 ;i <len; i++)
             flow[i] = rand()&0xff;
         bloom_filter_put(bf_p,&flow,len);
     }
 }
-
 static inline uint32_t rol(uint32_t word, uint32_t shift){
 	return (word<<shift) | (word >> (32 - shift));
 }
@@ -143,9 +112,6 @@ static uint32_t hsiphash(uint32_t src, uint32_t dst, uint16_t src_port, uint16_t
 	uint32_t hash = (v0^v1)^(v2^v3);
     return hash; 	
 }
-
-
-
 static uint64_t MACstoi(unsigned char* str){
     int last = -1;
     unsigned char a[6];
@@ -161,8 +127,6 @@ static uint64_t MACstoi(unsigned char* str){
         (uint32_t)(a[0]));
     
 }
-
-
 static void init_MAC(){
 	
 	client_mac_64 = MACstoi(CLIENT_MAC);
@@ -173,7 +137,6 @@ static void init_MAC(){
 	server_r_mac_64 = MACstoi(SERVER_R_MAC);
 	attacker_r_mac_64 = MACstoi(ATTACKER_R_MAC);
 }
-
 static __always_inline int forward(struct ethhdr* eth, struct iphdr* ip){
 	
 	if (ip->daddr == client_ip){
@@ -223,10 +186,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
     if(!tcp){
         return -1;
     }
-    if(tcp->ece){
-        printf("ece\n");
-    }
-
+   
     struct tcp_opt_ts* ts = NULL;
 	void* tcp_opt = (void*)(tcp + 1);
 
@@ -238,13 +198,8 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 	}
     if(tcp->doff >=8){
         int opt_ts_offset = 0;
-        if(timestamp_option == TS_ON)
-            opt_ts_offset = parse_timestamp(tcp); 
-        else
-            opt_ts_offset == 2;
-        
+        opt_ts_offset = parse_timestamp(tcp); 
         if(opt_ts_offset < 0) return -1;
-
         ts = (tcp_opt + opt_ts_offset);
         if((void*)(ts + 1) > pkt_end){
             return -1;
@@ -307,16 +262,8 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
             
             __u32 rx_seq = tcp->seq;
 
-            // Get flow's syncookie (by haraka256)
-            // Conver syn packet to synack, and put syncookie
-            uint32_t hashcookie = 0;
-            if(hash_option == HARAKA)
-                haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
-            else if (hash_option == HSIPHASH){
-                hashcookie = hsiphash(ip->daddr,ip->saddr,tcp->source,tcp->dest);
+            uint32_t hashcookie = hsiphash(ip->daddr,ip->saddr,tcp->source,tcp->dest);
 
-            }
-            
             tcp->seq = hashcookie;
             tcp->ack_seq = bpf_htonl(bpf_ntohl(rx_seq) + 1);
             tcp->source ^= tcp->dest;
@@ -325,8 +272,8 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 
             tcp->syn = 1;
             tcp->ack = 1;
-            if(tcpcsum_option == CSUM_ON)
-                tcp->check = cksumTcp(ip,tcp);
+           
+            tcp->check = cksumTcp(ip,tcp);
             if(opt_pressure == 1)
                 return -1;
 
@@ -344,24 +291,23 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
             else{   
                 // validate syncookie
                 uint32_t syncookie = 0;
-                if(hash_option == HARAKA)
-                    haraka256((uint8_t*)&syncookie, (uint8_t*)&flows[worker_id], 4 , 32);
-                else if (hash_option == HSIPHASH)
-                    syncookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
+                syncookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
                 if(bpf_htonl(bpf_ntohl(tcp->ack_seq) -1 ) != syncookie){
-                    printf("drop: %u\n",++drop_num);
+                    //printf("drop: %u\n",++drop_num);
                     return -1;
                 }
                 tcp->ece = 1; //tag the packet
-                bloom_filter_put(bf_p,&flows[worker_id],12);
 
+                // This should be add after receive clone ack packet, but have some bugs.
+                bloom_filter_put(bf_p,&flows[worker_id],12);
                 return forward(eth,ip);   
             }
 		}
 	}
+
 	// Ingress from router eth2 (outbound) 
 	else{
-        // Packet sent from server agent
+        // clone Packet sent from server agent.(still fail)
 		if(tcp->ece){
             printf("%u\n",ingress_ifindex);
             printf("receive ece\n");
@@ -389,11 +335,8 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 
 
 static struct option long_options[] = {
-	{"action", required_argument, 0, 'c'},
-	{"hash-type", required_argument, 0, 'h'},
-	{"tcp-csum", required_argument, 0, 's'},
-	{"timestamp", required_argument, 0, 't'},
-	{"change-key",no_argument,0, 'k'},
+	{"connection", required_argument, 0, 'c'},
+    {"option-enable",no_argument, 0, 'o'},
 	{"pressure", no_argument, 0, 'p'},
 	{"drop", no_argument, 0, 'd'},
 	{"quiet", no_argument, 0, 'q'},
@@ -407,16 +350,13 @@ static void usage(const char *prog)
 	const char *str =
 		"  Usage: %s [XSKNF_OPTIONS] -- [APP_OPTIONS]\n"
 		"  App options:\n"
-		"  -c, --action			'REDIRECT', 'DROP' packets or 'PASS' to network stack (default REDIRECT).\n"
-		"  -h, --hash-type		'HARAKA', 'HSIPHASH', 'OFF' for hash function of the Hash cookie.\n"
-		"  -s, --tcp-csum 		'ON', 'OFF', Turn on/off recompute TCP csum.\n"
-		"  -t, --timestamp 		'ON', 'OFF', Turn on/off parsing timestamp.\n"
-		"  -k  --change-key     Enable switch_agent to validate two cookies.\n"
-		"  -p, --pressure 		Receive a SYN packet and caculate syncookie then DROP!\n"
+		"  -c, --connection	    <N>, Generate N random flow into bloomfilter.\n"
+        "  -o, --option-enable  Deal with all the tcp option.\n"
+		"  -p, --pressure       Receive a SYN packet and caculate syncookie then DROP!\n"
 		"  -f, --foward			Only foward packet in packet proccessor\n"
 		"  -d, --drop 			Only drop packet in packet proccessor.\n"
 		"  -q, --quiet			Do not display any stats.\n"
-		"  -x, --extra-stats		Display extra statistics.\n"
+		"  -x, --extra-stats    Display extra statistics.\n"
 		"  -a, --app-stats		Display application (syscall) statistics.\n"
 		"\n";
 	fprintf(stderr, str, prog);
@@ -429,60 +369,16 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 	int option_index, c;
 
 	for (;;) {
-		c = getopt_long(argc, argv, "c:h:s:t:pdqxaf", long_options, &option_index);
+		c = getopt_long(argc, argv, "c:opdqxaf", long_options, &option_index);
 		if (c == -1)
 			break;
-
 		switch (c) {
 		case 'c':
-			if (!strcmp(optarg, "REDIRECT")) {
-				opt_action = ACTION_REDIRECT;
-			} else if (!strcmp(optarg, "DROP")) {
-				opt_action = ACTION_DROP;
-			} else if (!strcmp(optarg, "PASS")) {
-				opt_action = ACTION_PASS;
-			} else {
-				fprintf(stderr, "ERROR: invalid action %s\n", optarg);
-				usage(basename(app_path));
-			}
+			opt_add_connection = atoi(optarg);
 			break;
-
-		case 'h':
-			if (!strcmp(optarg, "HARAKA")) {
-				hash_option = HARAKA;
-			} else if (!strcmp(optarg, "HSIPHASH")) {
-				hash_option = HSIPHASH;
-			} else if (!strcmp(optarg, "OFF")) {
-				hash_option = HASH_OFF;
-			} else {
-				fprintf(stderr, "ERROR: invalid action %s\n", optarg);
-				usage(basename(app_path));
-			}
-			break;
-
-		case 's':
-			if (!strcmp(optarg, "ON")) {
-				tcpcsum_option = CSUM_ON;
-			} else if (!strcmp(optarg, "OFF")) {
-				tcpcsum_option = CSUM_OFF;
-			} else {
-				fprintf(stderr, "ERROR: invalid action %s\n", optarg);
-				usage(basename(app_path));
-			}
+        case 'o':
+			opt_tcpoption = 1;
 			break;	
-		case 't':
-			if (!strcmp(optarg, "ON")) {
-				timestamp_option = TS_ON;
-			} else if (!strcmp(optarg, "OFF")) {
-				timestamp_option = TS_OFF;
-			} else {
-				fprintf(stderr, "ERROR: invalid action %s\n", optarg);
-				usage(basename(app_path));
-			}
-			break;
-		case 'k':
-			opt_change_key = 1;
-			break;		
 		case 'p':
 			opt_pressure = 1;
 			break;		
@@ -546,17 +442,7 @@ int swich_agent (int argc, char **argv){
 
 		struct global_data global;
 		global.workers_num = global_workers_num;
-		switch (opt_action) {
-		case ACTION_REDIRECT:
-			global.action = XDP_TX;
-			break;
-		case ACTION_DROP:
-			global.action = XDP_DROP;
-			break;
-		case ACTION_PASS:
-			global.action = XDP_PASS;
-			break;
-		}
+		
 		//global.double_macswap = opt_double_macswap;
 		if (bpf_map_update_elem(global_fd, &zero, &global, 0)) {
 			fprintf(stderr, "ERROR: unable to initialize eBPF global data\n");
@@ -565,12 +451,11 @@ int swich_agent (int argc, char **argv){
 	}
 
 	setlocale(LC_ALL, "");
+
     bf_p = bloom_filter_new(3*1024*1024, 3, djb2,sdbm,mm2);
-	init_salt();
 	init_saopts();
 	init_MAC();
 	init_ip();
-	load_constants();
 	xsknf_start_workers();
     if(opt_add_connection){
         add_bf();
@@ -583,9 +468,7 @@ int swich_agent (int argc, char **argv){
 			dump_stats(config, obj, opt_extra_stats, opt_app_stats);
 		}
 	}
-
 	xsknf_cleanup();
-
 	return 0;
 }
 
