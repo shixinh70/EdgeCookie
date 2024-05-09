@@ -62,7 +62,7 @@
 /*
  * 32 bit magic FNV-0 and FNV-1 prime
  */
-#define FNV_32_PRIME ((Fnv32_t)0x01000193)
+//#define FNV_32_PRIME ((Fnv32_t)0x01000193)
 
 
 /*
@@ -103,7 +103,6 @@ Fnv32_t fnv_32_buf(void *buf, size_t len, uint32_t seed)
 	/* xor the bottom with the current octet */
 	hval ^= (Fnv32_t)*bp++;
     }
-
     /* return our new hash value */
     return hval;
 }

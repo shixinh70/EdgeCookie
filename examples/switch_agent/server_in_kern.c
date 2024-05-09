@@ -1,10 +1,12 @@
 #include "server.h"
+#define DROPTEST 0
+#define DROP_THRESH 100000
+
 uint8_t init = 0;
-__u16 map_cookies[65536];
-__u32 map_seeds[65536];
-__u32 dropcnt ;
-__u32 hash_seed = 1234;
-__u32 testcnt ;
+static __u16 map_cookies[65536];
+static __u32 map_seeds[65536];
+//static __u32 dropcnt ;
+static __u32 testcnt ;
 char _license[] SEC("license") = "GPL";
 
 struct {
@@ -23,8 +25,7 @@ struct {
         __uint(pinning, LIBBPF_PIN_BY_NAME);
 } rtt_map SEC(".maps");
 
-
-static __always_inline __u32 fnv_32_buf(void *buf, size_t len, uint32_t seed)
+static __always_inline __u32 fnv_32_buf(const void *buf, size_t len, uint32_t seed)
 {
     __u32 hval = seed;//FNV1_32_INIT;
     unsigned char *bp = (unsigned char *)buf;	/* start of buffer */
@@ -43,16 +44,53 @@ static __always_inline __u32 fnv_32_buf(void *buf, size_t len, uint32_t seed)
 #endif
 
 	/* xor the bottom with the current octet */
-	hval ^= (__u32)*bp++;
+	    hval ^= (__u32)*bp++;
     }
 
     /* return our new hash value */
-    return hval;
+    bpf_printk ("hval>>16 =  %d",hval >> 16);
+    hval = bpf_htonl (hval);
+    return (hval >> 16);
 }
 
 
+unsigned int FNVHash(const void *buf, size_t len, uint32_t seed) {
+	const unsigned int fnv_prime = 0x811C9DC5;
+	unsigned int hash = seed;
+	unsigned int i = 0;
+    unsigned char* str = (unsigned char*)buf;
+	for (i = 0; i < len; str++, i++)
+	{
+		hash *= fnv_prime;
+		hash ^= (*str);
+	}
 
-// main router logic
+	return (hash >> 16) & (hash & 0xffff);
+}
+
+
+static __always_inline __u16 get_hash_cookie(__u32 hash_cookie){
+	return (hash_cookie >> 16) ^ (hash_cookie & 0xffff);
+}
+
+static __always_inline __u16 get_map_cookie(__u32 ipaddr){
+
+	uint16_t seed_key = ipaddr & 0xffff;
+    __u32 le_ip = bpf_ntohl(ipaddr);
+	__s32 cookie_key = fnv_32_buf(&le_ip,4,map_seeds[seed_key]);
+    if(cookie_key  < 0 || cookie_key > 65536) return -1;
+	return map_cookies[cookie_key];
+}
+
+static __always_inline __u32 get_hybrid_cookie(__u32 syn_cookie, __u32 ipaddr, __u32 salt){
+
+	__u32 hash_cookie = get_hash_cookie(syn_cookie);
+	__u32 map_cookie = get_map_cookie(ipaddr);
+	return (hash_cookie << 16) | map_cookie;
+
+}
+
+/*  Main router logic   */
 SEC("prog") int xdp_router(struct xdp_md *ctx) {
     void *data_end = (void *)(long)ctx->data_end;
     void *data = (void *)(long)ctx->data;
@@ -67,8 +105,9 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
         }
         init = 1;
     }
+
+    /*  Parse header   */
     cur.pos = data;
-    
     int ether_proto = parse_ethhdr(&cur,data_end,&eth);
     if(ether_proto == -1)
         return XDP_DROP;
@@ -96,10 +135,9 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                             tcp_old_flag, bpf_ntohs(ip->tot_len), tcp->doff * 4);
             }
 
-            // Use 
-            if(DROPTEST){
+            /*  Test change cookie protocol, if recieve packet > thresh, then start change cookie */
+            if(0){
                 testcnt ++;
-                //bpf_printk("%d\n",testcnt);
                 if(testcnt >= DROP_THRESH){
                     //bpf_printk ("SERVER_IN: Start change hash_seed!\n");
                     struct eth_mac_t mac_tmp;
@@ -114,25 +152,32 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                         DEBUG_PRINT ("SERVER_IN: Look up rtt_map fail!\n");
                         return XDP_DROP;
                     }
-                    uint16_t seed_key = (ip->saddr) & 0xffff;            
-                    __u16 cookie_key = fnv_32_buf(&ip->saddr,4,seed_key); 
+
+                    /*  All the index to access map need to be bounded,
+                        if we use usign type, the <0 wiil be optimize by
+                        the compiler, so need to use signed type*/
+
+                    __u32 le_ip = bpf_htonl(ip->saddr);
+                    __s32 seed_key = (ip->saddr) & 0xffff;
+                    if(seed_key < 0 || seed_key > 65536){
+                        return XDP_DROP;
+                    }            
+                    __u16 cookie_key = fnv_32_buf(&le_ip,4,5);
+                    
+
+                    /*  Generate New map_cookie and map_seed    */
                     __u16 new_cookie = (bpf_get_prandom_u32() & 0xffff);
-
-                    /*  tricky way to pass varifier, ip should be big endian
-                        if want to take ip's most significant 16 bits. 
-                        we should mask with 0xffff  */
-
                     __u32 new_seed = bpf_get_prandom_u32();
+
                     map_cookies[cookie_key] = new_cookie;
                     map_seeds[seed_key] = new_seed;
 
-                    //hash_seed = new_seed;
-                    //DEBUG_PRINT ("SERVER_IN: New hash_seed = %u\n",hash_seed);
 
                     ip->saddr ^= ip->daddr;
                     ip->daddr ^= ip->saddr;
                     ip->saddr ^= ip->daddr;
 
+                    /*  Store new info into some tcp header */
                     tcp->source = cookie_key;
                     tcp->dest = new_cookie;
                     tcp->window = seed_key;
@@ -141,19 +186,20 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     tcp->ece = 1;
 
                     testcnt = 0;
+
+                    /* Send to switch_agent*/
                     return XDP_TX;
                 }
             }
 
-            // Packet with ts option
-
+            /*  Packet with option  */
             if(tcphdr_len >= 32){ 
                 struct tcp_opt_ts* ts;
-               
-                // This parse timestamp may can be optimize
-                // Switch agent have parse the timestamp so can put the ts type
-                // in some un-used header field.
+
+                /*  Inbound ack packets */
                 if(tcp->ack && (!tcp->syn)){
+
+                    /*  Parse timestamp */
                     int opt_ts_offset = parse_timestamp(&cur,tcp,data_end,&ts);
                     if(opt_ts_offset == -1) return XDP_DROP;
 
@@ -162,9 +208,11 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     if(tcp_header_end > data_end) return XDP_DROP;
 
 
-                    // Ack packet which TS == TS_START and no payload (Pass router's cookie check).
-                    // Insert new connection 
-                    DEBUG_PRINT("tsecr = %d TS_START = %d\n",tsecr, TS_START);
+                    /*  Ack packet's timestamp == TS_START, 
+                        1. Third ACK of three way handshake
+                        2. First request of client  */
+
+                    /*  Situation 1. which has no payload. insert new connection    */
                     if (tsecr == TS_START && (tcp_header_end == data_end) && (!(tcp->fin))){
                         DEBUG_PRINT("SERVER_IN: Packet tsecr == TS_START, and NO payload, Create conntrack\n");
                         struct map_key_t key = {
@@ -174,19 +222,16 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                             .dst_port = tcp->dest
                         };
 
-                        // Update and Create val are same function;
-                        // Then store the ack for compute ack delta.
-                        // store client's timestamp
-
+                        
+                        /*  Store ack for later compute delta, and store syncookie  */
                         struct map_val_t val = {.delta = bpf_ntohl(tcp->ack_seq),
-                                                //.ts_val_s = ts->tsval,
                                                 .hash_cookie = bpf_htonl(bpf_ntohl(tcp->ack_seq) - 1)
                                                 };
                                          
                         bpf_map_update_elem(&conntrack_map, &key, &val, BPF_ANY);
                         DEBUG_PRINT("SERVER_IN: Update delta = %u\n",val.delta);
-                        // Change ACK packet to SYN packet (seq = seq -1 , ack = 0, tsecr = 0);
-                        // Store some message for compute TCP csum
+
+                        /*  Conver ack to syn  and set proper seq# ack# */
                         __u32 old_tcp_seq = tcp->seq;
                         __u32 old_tcp_ack = tcp->ack_seq;
                         __u64 tcp_csum = tcp->check;
@@ -194,21 +239,17 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                         __u32* flag_ptr ; 
 
                         flag_ptr = ((void*)tcp) + 12;
-                        // if(((void*)tcp) + 12 > data_end) return XDP_DROP;
-                        // DEBUG_PRINT("ffffffff\n");
-
                         if((void*)flag_ptr + 4 > data_end) return XDP_DROP;
                        
                         __u32 tcp_old_flag = *flag_ptr;
                         tcp->ack = 0;tcp->syn = 1;
                         __u32 tcp_new_flag = *flag_ptr;
 
-                        //tcp->seq -= bpf_htonl(1);
                         tcp->seq = bpf_htonl(bpf_ntohl(tcp->seq)-1);
                         tcp->ack_seq = 0;
                         ts->tsecr = 0;
                         
-                        //Compute TCP checksum
+                        /*  Compute TCP csum    */
                         tcp_csum = bpf_csum_diff(&tcp_old_flag, 4, &tcp_new_flag, 4, ~tcp_csum);
                         tcp_csum = bpf_csum_diff(&old_tcp_seq, 4, &tcp->seq, 4, tcp_csum);
                         tcp_csum = bpf_csum_diff(&old_tcp_ack, 4, 0, 0, tcp_csum);
@@ -217,14 +258,10 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
 
                     }
 
-                    // Packet for transmit data (payload != 0)
-                    // If ack packet not use for create connection, modify delta and replace cookie to server' ts 
-                    // other ack.
+                    /*  Ack Packet transmit data    */
                     else{      
                         DEBUG_PRINT("SERVER_IN: Packet is not used for create connection\n"); 
-
                         uint16_t seed_key = ip->saddr & 0xffff;
-                        // Find pin_map (key = 4 turple); Q: key's order?
                         struct map_key_t key = {
                                 .src_ip = ip->saddr,
                                 .dst_ip = ip->daddr,
@@ -232,114 +269,132 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                                 .dst_port = tcp->dest
                             };
                         struct map_val_t val;
-                        
                         struct map_val_t* val_p = bpf_map_lookup_elem(&conntrack_map,&key);
-                        // Packet has create connection
+
+                        /*  Flow exist */
                         if(val_p) {
                             DEBUG_PRINT ("SERVER_IN: Connection exist in map!\n");
                         }
-                        // Packet has no connection
-                        
+
+                        /*  Flow not exist  */
                         else {
-                            DEBUG_PRINT ("SERVER_IN: Connection not exist in map!\n");
-
-                            dropcnt ++;
-                            DEBUG_PRINT ("SERVER_IN: Current dropcnt = %u\\%d \n",dropcnt,DROP_THRESH);
-                            // Change seed logic
-                            if(dropcnt >= DROP_THRESH){
-                                DEBUG_PRINT ("SERVER_IN: Start change hash_seed!\n");
-
-                                struct eth_mac_t mac_tmp;
-                                __builtin_memcpy(&mac_tmp, eth->h_source, 6);
-                                __builtin_memcpy(eth->h_source, eth->h_dest, 6);
-                                __builtin_memcpy(eth->h_dest, &mac_tmp, 6);
-
-                                __u32* rtt_p;
-                                __u32 zero = 0;
-                                rtt_p = bpf_map_lookup_elem(&rtt_map,&zero);
-                                if(!rtt_p){
-                                    DEBUG_PRINT ("SERVER_IN: Look up rtt_map fail!\n");
-                                    return XDP_DROP;
-                                }
-                                //uint16_t seed_key = (ip->saddr) & 0xffff;            
-                                __u16 cookie_key = fnv_32_buf(&ip->saddr,4,seed_key); 
-                                __u16 new_cookie = (bpf_get_prandom_u32() & 0xffff);
-
-                                /*  tricky way to pass varifier, ip should be big endian
-                                    if want to take ip's most significant 16 bits. 
-                                    we should mask with 0xffff  */
-
-                                __u32 new_seed = bpf_get_prandom_u32();
-                                map_cookies[cookie_key] = new_cookie;
-                                map_seeds[seed_key] = new_seed;
-
-                                //hash_seed = new_seed;
-                                //DEBUG_PRINT ("SERVER_IN: New hash_seed = %u\n",hash_seed);
-
-                                ip->saddr ^= ip->daddr;
-                                ip->daddr ^= ip->saddr;
-                                ip->saddr ^= ip->daddr;
-
-                                tcp->source = cookie_key;
-                                tcp->dest = new_cookie;
-                                tcp->window = seed_key;
-                                tcp->seq = new_seed;
-                                tcp->ack_seq = *rtt_p;
-                                tcp->ece = 1;
-
-                                testcnt = 0;
-                                return XDP_TX;
+                            if(ts->tsecr == TS_START){
+                                /*  TODO: Conver ack to syn then insert new connection and doing
+                                    handshaking with server */    
                             }
+                            // else{
+                            //     /*  Malicious ack packet, if packet volumn > thresh, then start change cookie   */
+                            //     DEBUG_PRINT ("SERVER_IN: Connection not exist in map!\n");
+                            //     dropcnt ++;
+                            //     DEBUG_PRINT ("SERVER_IN: Current dropcnt = %u\\%d \n",dropcnt,DROP_THRESH);
+                                
+                            //     /*  Change cookie logic */
+                            //     if(dropcnt >= DROP_THRESH){
+                            //         DEBUG_PRINT ("SERVER_IN: Start change hash_seed!\n");
+                            //         struct eth_mac_t mac_tmp;
+                            //         __builtin_memcpy(&mac_tmp, eth->h_source, 6);
+                            //         __builtin_memcpy(eth->h_source, eth->h_dest, 6);
+                            //         __builtin_memcpy(eth->h_dest, &mac_tmp, 6);
+
+                            //         __u32* rtt_p;
+                            //         __u32 zero = 0;
+                            //         rtt_p = bpf_map_lookup_elem(&rtt_map,&zero);
+                            //         if(!rtt_p){
+                            //             DEBUG_PRINT ("SERVER_IN: Look up rtt_map fail!\n");
+                            //             return XDP_DROP;
+                            //         }
+
+                            //         /*  All the index to access map need to be bounded,
+                            //             if we use usign type, the <0 wiil be optimize by
+                            //             the compiler, so need to use signed type*/
+
+                            //         __u32 le_ip = bpf_htonl(ip->saddr);
+                            //         __s32 seed_key = (ip->saddr) & 0xffff;
+                            //         if(seed_key < 0 || seed_key > 65536){
+                            //             return XDP_DROP;
+                            //         }            
+                            //         __u16 cookie_key = fnv_32_buf(&le_ip,4,5);
+                                    
+
+                            //         /*  Generate New map_cookie and map_seed    */
+                            //         __u16 new_cookie = (bpf_get_prandom_u32() & 0xffff);
+                            //         __u32 new_seed = bpf_get_prandom_u32();
+
+                            //         map_cookies[cookie_key] = new_cookie;
+                            //         map_seeds[seed_key] = new_seed;
+
+
+                            //         ip->saddr ^= ip->daddr;
+                            //         ip->daddr ^= ip->saddr;
+                            //         ip->saddr ^= ip->daddr;
+
+                            //         /*  Store new info into some tcp header */
+                            //         tcp->source = cookie_key;
+                            //         tcp->dest = new_cookie;
+                            //         tcp->window = seed_key;
+                            //         tcp->seq = new_seed;
+                            //         tcp->ack_seq = *rtt_p;
+                            //         tcp->ece = 1;
+                            //         testcnt = 0;
+
+                            //         /* Send to switch_agent*/
+                            //         return XDP_TX;
+                            //     }
+                            // }
                             return XDP_DROP;
                         }
                     
+                        /*   Get flow's info    */
                         if( bpf_probe_read_kernel(&val,sizeof(val),val_p) != 0){
                             DEBUG_PRINT ("SERVER_IN: Read map_val fail!\n");
                             return XDP_DROP;
                         }
 
+                        /*  Store old info for csum computation */
                         __u32 rx_ack_seq = tcp->ack_seq;
                         __u32 rx_tsecr = ts->tsecr;
                         __u64 tcp_csum = tcp->check;
                         __u32 new_ack_seq;
                         int modify = 0; 
 
-                        // flow's hybrid_cookie not init (client's first ack) or
-                        // oudated (first ack packet after change seed) 
+                        /*  Current flow's hash_seed not sync with global seed  */
                         if(val.cur_hash_seed != map_seeds[seed_key]){
                             __u32 hybrid_cookie = bpf_ntohl(val.hybrid_cookie);
 
-                            // Not init
+                            /*  Hybrid cookie not init, it should be init by the first request ack packet*/
                             if(val.cur_hash_seed == 0){                                
-                            //bpf_printk("SERVER_IN: flow.Cur_hash_seed == 0, init hybrid cookie\n");
-                            hybrid_cookie = get_hybrid_cookie(val.hash_cookie,ip->saddr,map_seeds[seed_key]);
-                            hybrid_cookie &= 0x3fffffff; // mask out leftest 2 bits
+
+                                /*  Hybrid cookie = 
+                                Low(memory)                              HIGH
+                                 ___________________________________________
+                                |Ts counter | fold(syncookie) | hash_cookie |
+                                |__2__bits__|____14 bits______|___16 bits___|   */
+
+                                hybrid_cookie = get_hybrid_cookie(val.hash_cookie,ip->saddr,map_seeds[seed_key]);
+                                hybrid_cookie &= 0x3fffffff; // mask out leftest 2 bits
                             }
 
-                            // Outdated
+                            /*  Hybrid cookie was outdated after change cookie  */
                             else{
-                                //bpf_printk("SERVER_IN: Cur hybrid cookie outdated, udpate new map cookie\n");
                                 uint32_t new_map_cookie = get_map_cookie(ip->saddr);
+                                if((__s32)new_map_cookie < 0) return XDP_DROP;
                                 hybrid_cookie = ((hybrid_cookie & 0xffff0000) | new_map_cookie);
                             }  
 
-                            // Make the timestamp incremental
+                            /*  Make the timestamp incremental   */
                             hybrid_cookie += 0x40000000; 
-
-                            // Update outdated hybrid cookie
+                            /*  Update cookie info  */
                             val.hybrid_cookie = bpf_htonl(hybrid_cookie);
-                            //bpf_printk("SERVER_IN: Cur hash cookie = %u\n",(hybrid_cookie >>16) & 0x3ffff);
-                            
-                            // Update cur_hash_seed
                             val.cur_hash_seed = map_seeds[seed_key];
                             modify =1;
                         }
 
-                        // TCP handover
+                        /*  TCP handover     */
                         new_ack_seq = bpf_htonl(bpf_ntohl(tcp->ack_seq) - val.delta);
-                        tcp->ack_seq = new_ack_seq; // Ack delta
+                        tcp->ack_seq = new_ack_seq;
                         __u32 new_tsecr = val.ts_val_s;
-                        ts->tsecr = new_tsecr; // convert cookie to server's ts_val
+                        ts->tsecr = new_tsecr; /*   convert ecr to server's ts_val */
+
                         if(modify)
                             bpf_map_update_elem(&conntrack_map,&key,&val,BPF_EXIST);
                         
@@ -351,11 +406,9 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     }
                 }
 
-                /* server_en will redirect server's synack to server_in,
-                so convert synack to ack and send to server */
+                /*  server_en will redirect server's synack to server_in,
+                    so convert synack to ack and send to server (only in SKB mode)*/
                 else if(tcp->ack && tcp->syn){
-
-                    
                     __u64 tcp_csum = tcp->check;
                     __u32* ptr ; 
 
@@ -368,16 +421,15 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     DEBUG_PRINT("SERVER_IN: SYN ACK redirect back to server_in, conver it to ack\n");
                     tcp_csum = bpf_csum_diff(&tcp_old_flag, 4, &tcp_new_flag, 4, ~tcp_csum);
                     tcp->check = csum_fold_helper_64(tcp_csum);
-                    
-                
+            
                 }
             
             }
             else{
-                //DEBUG_PRINT("SERVER_IN: No options TCP packet ingress, Foward\n");
-
+                /*  TODO: If disable timestamp*/
             }
-        } 
+        }
+        /*  Else, not tcp packet just pass*/ 
     }
     return XDP_PASS;
 }

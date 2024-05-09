@@ -120,7 +120,7 @@ $(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF) ./examples/switch_agen
 		-Werror \
 		$(CFLAGS) \
 		-emit-llvm -c -g -o ${@:.o=.ll} $<
-	$(LLC) -march=bpf -filetype=obj -o $@ ${@:.o=.ll}
+	$(LLC) -march=bpf  -filetype=obj -o $@ ${@:.o=.ll}
 	$(RM) ${@:.o=.ll}
 
 

@@ -25,7 +25,7 @@
 
 #define TS_START bpf_ntohl(0x01010000)
 #define MAX_TCP_OPTION 10
-#define MAX_CONNECTION 5000
+#define MAX_CONNECTION 7000000
 
 
 // SYN

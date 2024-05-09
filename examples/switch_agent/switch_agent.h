@@ -25,27 +25,29 @@
 #include "timeit.h"
 #include "pthread.h"
 #include "fnv.h"
+
 #define MSTONS 1000000
-#define DEBUG 0
+#define TS_START bpf_ntohl(0x01010000)
+
+
+#define DEBUG 1
+
 #define DEBUG_PRINT(fmt, ...) \
 	if (DEBUG)                \
 	printf(fmt, ##__VA_ARGS__)
 
-#define TS_START bpf_ntohl(0x01010000)
-#define CLIENT_MAC "00:00:00:00:01"
-#define SERVER_MAC "00:00:00:00:02"
+#define CLIENT_MAC "02:42:ac:12:00:03"
+#define SERVER_MAC "02:42:ac:13:00:03"
 #define ATTACKER_MAC "00:00:00:00:03"
-#define CLIENT_R_MAC "00:00:00:00:11"
-#define SERVER_R_MAC "00:00:00:00:12"
+#define CLIENT_R_MAC "02:42:ac:12:00:02"
+#define SERVER_R_MAC "02:42:ac:13:00:02"
 #define ATTACKER_R_MAC "00:00:00:00:13"
-#define CLIENT_IP ("10.18.0.3")
-#define SERVER_IP ("10.19.0.3")
+#define CLIENT_IP ("172.18.0.3")
+#define SERVER_IP ("172.19.0.3")
 #define ATTACKER_IP ("10.20.0.3")
-#define CLIENT_R_IF 0
-#define SERVER_R_IF 1
-#define ATTACKER_R_IF 0
-#define TS_START bpf_ntohl(0x01010000)
-
+#define CLIENT_R_IF_ORDER 0
+#define SERVER_R_IF_ORDER 1
+#define ATTACKER_R_IF_ORDER 0
 
 struct common_synack_opt
 {
@@ -60,8 +62,9 @@ struct eth_mac_t
 }__attribute__((packed));
 
 struct global_data {
-	int action;
-	int double_macswap;
+    int client_r_if_order;
+    int server_r_if_order;
+    int attacker_r_if_order;
 	int workers_num;
 };
 
@@ -73,9 +76,6 @@ struct pkt_5tuple {
   uint32_t salt[5];
 } __attribute__((packed));
 
-// Redirect from ingress_ifindex to redirect_ifindex
-// Set eth.src to ingress_ifindex's mac and eth.dst to redirect_ifindex's mac
-static inline int redirect_if(int ingress_ifindex, int redirect_ifindex, struct ethhdr* eth);
 
 
 

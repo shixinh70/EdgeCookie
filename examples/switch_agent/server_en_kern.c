@@ -1,5 +1,6 @@
 #include "server.h"
-//uint8_t cur_cookie_head = 0;
+#define XDP_DRV 0
+#define SERVER_IF 28
 __u32 max_rtt = 0 ;
 char _license[] SEC("license") = "GPL";
 
@@ -28,6 +29,8 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
     struct iphdr* ip;
     struct tcphdr* tcp;
 
+
+    /* Parse header */
     cur.pos = data;
     int ether_proto = parse_ethhdr(&cur,data_end,&eth);
     if(ether_proto == -1) return TC_ACT_SHOT;
@@ -53,6 +56,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
             }
             
 
+            /*  Outbound packet with option */
             if(tcphdr_len >= 32){
                 struct map_key_t key = {
                         .src_ip = ip->daddr,
@@ -76,125 +80,93 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                 }
             
 
-                // if SYN-ACK packet (from server)
-                // Swap ip address, port, timestamp, mac, and redirect to server_in
+                /*  Outbound syn-ack from server to client.
+                    Convert to ack and send back to server */
                 if(tcp->ack && tcp->syn){
 
                     struct tcp_opt_ts* ts;
                     int opt_ts_offset = parse_timestamp(&cur,tcp,data_end,&ts);
                     if(opt_ts_offset == -1) return TC_ACT_SHOT;
 
-                    //DEBUG_PRINT ("TC: SYNACK packet ingress! csum = %x\n",bpf_ntohs(tcp->check));
+                    
                     DEBUG_PRINT("TC: Update delta = detla(%u) - SYNACK's seg(%u) - 1= %u\n", 
                                 val.delta, bpf_htonl(tcp->seq) ,val.delta - (tcp->seq + (bpf_htonl(1))));
-                    // Modify delta (need to check the byte order problem)
                     
+                
                     val.delta = val.delta - bpf_ntohl(tcp->seq) - 1;
                     val.ts_val_s = ts->tsval;
 
-                    //BPF_EXIST will update an existing element (may have bug)
+                    
                     bpf_map_update_elem(&conntrack_map,&key,&val,BPF_EXIST);
                     tcp->window = bpf_htons(0x1F6); // 502
-                    // Swap ip
+                
                     ip->saddr ^= ip->daddr;
                     ip->daddr ^= ip->saddr;
                     ip->saddr ^= ip->daddr;
 
-                    // Swap port and convert to ack packet
-                    //__u64 tcp_csum = tcp->check;
-                    // __u32* ptr ; 
-                    // ptr = ((void*)tcp) + 12;
-                    // if((void*)ptr + 4 > data_end) return TC_ACT_SHOT;
-                       
-                    // __u32 tcp_old_flag = *ptr;
-                    // tcp->syn = 0;tcp->ack = 1;tcp->ece = 1;
-                    // __u32 tcp_new_flag = *ptr;
-                    
 
                     tcp->source ^= tcp->dest;
                     tcp->dest ^= tcp->source;
                     tcp->source ^= tcp->dest;
-                    //DEBUG_PRINT("TC: SYNACK seg = %u, ack = %u\n",bpf_ntohl(tcp->seq), bpf_ntohl(tcp->ack_seq));
-                    
-                    //__u32 rx_seg = tcp->seq;
-                    //__u32 rx_ack = tcp->ack_seq;
+        
 
                     tcp->seq ^= tcp->ack_seq;
                     tcp->ack_seq ^= tcp->seq;
                     tcp->seq ^= tcp->ack_seq;
-
-                    tcp->ack_seq = bpf_htonl(bpf_ntohl(tcp->ack_seq) + 1 );
-                    //DEBUG_PRINT("TC: ACK seg = %u, ack = %u\n",bpf_ntohl(tcp->seq), bpf_ntohl(tcp->ack_seq));
-
-                    // tcp_csum = bpf_csum_diff(&tcp_old_flag, 4, &tcp_new_flag, 4, ~tcp_csum);
-                    // tcp_csum = bpf_csum_diff(&rx_seg, 4, &tcp->seq, 4, tcp_csum);
-                    // tcp_csum = bpf_csum_diff(&rx_ack, 4, &tcp->ack_seq, 4, tcp_csum);
-                    // __u16 tcp_csum_16 = csum_fold_helper_64(tcp_csum) ;
-                    // DEBUG_PRINT("%x\n",bpf_htonl(tcp_csum_16));
-                    // tcp->check = tcp_csum_16;
-                    
-
-                    // Swap tsval and tsecr. Do we need to change the ts order to NOP NOP TS ?
+                    tcp->ack_seq = bpf_htonl(bpf_ntohl(tcp->ack_seq) + 1);
+                   
                     
                     ts->tsval ^= ts->tsecr;
                     ts->tsecr ^= ts->tsval;
                     ts->tsval ^= ts->tsecr;
-                    tcp->syn = 0;
+                    if(XDP_DRV)
+                        tcp->syn = 0;
                     tcp->check = 0;
 
                     
-                    
-                    // Swap mac.
-                    // OS compute checksum after tc hook.
-                    // current tcp.check was wrong, so can't use incremental way to compute,
-                    // must recompute.
                     struct eth_mac_t mac_tmp;
                     __builtin_memcpy(&mac_tmp, eth->h_source, 6);
                     __builtin_memcpy(eth->h_source, eth->h_dest, 6);
                     __builtin_memcpy(eth->h_dest, &mac_tmp, 6);
                     
-
-
-
-                    // Apache2 SYNACK len 36
+                    /*  Csum will be calculate after TC, so current csum is wrong
+                        must recompute the csum before redirect    */
                     __u64 tcp_csum_tmp = 0;
                     if(((void*)tcp)+ 36 > data_end){
-                        DEBUG_PRINT("TC: DROP!!! if(((void*)tcp)+ 40 > data_end)\n");
                         return TC_ACT_SHOT;
-                    } 
-                    ipv4_l4_csum(tcp, 36, &tcp_csum_tmp, ip); // Use fixed 36 bytes
-                    //DEBUG_PRINT("TC: SYNACK TO ACK! csum = %x\n",bpf_ntohs(tcp_csum_tmp));
+                    }
+
+                    /*  Use the variable length won't pass varifier, so use const number.
+                        Apache2's synack header_len are 36 bits*/
+                    ipv4_l4_csum(tcp, 36, &tcp_csum_tmp, ip);
                     tcp->check = tcp_csum_tmp;
                     DEBUG_PRINT("TC: Redirect ACK (from SYNACK) packet back to Ingress interface  \n");
-                    return bpf_redirect(2,BPF_F_INGRESS);
+                    return bpf_redirect(SERVER_IF,BPF_F_INGRESS);
                     
                 }
                 else if (tcp->rst){
-                    //DEBUG_PRINT("TC:  It's a Reset packet\n");
                     tcp->seq = bpf_htonl(bpf_ntohl(tcp->seq) + val.delta);
                     bpf_map_update_elem(&conntrack_map,&key,&val,BPF_EXIST);
                 }
 
-                // if ack packet (server's ack packet)
-                // update val.tsval = tsval
-                // tsval = cookie (from here, cookie not longer be TS_START, but cookie)
-                // Router use TS==cookie to validate ACK packet.
+                /*  For outbound ack, do tcp handover and store the server's
+                    timestamp and replace it by hybrid cookie.  */
                 else {
                     struct tcp_opt_ts* ts;
                     int opt_ts_offset = parse_timestamp(&cur,tcp,data_end,&ts);
                     if(opt_ts_offset == -1) return TC_ACT_SHOT;
                     
-                    // If seed had change, the head 2 bits of hybrid_cookie will increase
-                    // then reset max_rtt stastics.
+                    /*  Keep observe the max rtt by calculate the the diff of server's ack.
+                        If detect cookie changed (by the 2 bits counter), then reset statics.   */
                     uint8_t pkt_cookie_head = (bpf_ntohl(val.hybrid_cookie)) >> 30;
                     uint8_t cur_cookie_head = val.cur_cookie_head;
                     if(cur_cookie_head != pkt_cookie_head){
-                        //bpf_printk("TC: Detect change seed by cookiehead, max_rtt = %u\n",max_rtt);
                         cur_cookie_head = (cur_cookie_head + 1) %4;
                         val.cur_cookie_head = cur_cookie_head;
                         max_rtt = 0;
                     }
-                    // store server's tsval and put hybrid cookie in the tsval
+                    
+                    /*  Calculate rtt   */
                     uint32_t rtt = 0;
                     rtt = bpf_ntohl(ts->tsval) - bpf_ntohl(val.ts_val_s);
                     if(rtt > max_rtt){
@@ -202,12 +174,12 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                         max_rtt = rtt;
                         bpf_map_update_elem(&rtt_map,&zero,&rtt,BPF_ANY);
                     }
-                    //bpf_printk("TC: Max Rtt is %u ms\n",max_rtt);
                     
+                    /*  Store server's timestamp and put hybrid cookie  */
                     val.ts_val_s = ts->tsval;
                     ts->tsval = val.hybrid_cookie;
 
-                    // Modify seq#
+                    /*  Tcp handover   */
                     tcp->seq = bpf_htonl(bpf_ntohl(tcp->seq) + val.delta);
                     bpf_map_update_elem(&conntrack_map,&key,&val,BPF_EXIST);
                     DEBUG_PRINT ("TC: Send out Ack packet seg = %u, ack = %u, delta = %u\n",
@@ -215,9 +187,9 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                 }
             }
 
-            // tcphdr len < 32
+            
             else{
-                //DEBUG_PRINT("TC: No options TCP packet ingress, Foward\n");
+                /*  TODO: Disable tcp option packets */
             }
         } 
     }

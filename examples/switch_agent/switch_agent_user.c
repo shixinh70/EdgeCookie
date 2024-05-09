@@ -1,15 +1,10 @@
 #include "switch_agent.h"
 
-enum action {
-	ACTION_REDIRECT,
-	ACTION_DROP,
-	ACTION_PASS
-};
+
 enum hash_options{
 	HASH_OFF,
 	HARAKA,
 	HSIPHASH,
-	
 };
 enum tcpcsum_options{
 	CSUM_OFF,
@@ -28,36 +23,41 @@ static int opt_drop;
 static int opt_pressure;
 static int opt_forward;
 static int opt_change_key;
-static enum action opt_action = ACTION_REDIRECT;
+
+/* Default Option setting   */
 static enum hash_options hash_option = HARAKA;
 static enum tcpcsum_options tcpcsum_option = CSUM_ON;
 static enum timestamp_options timestamp_option = TS_ON;
 
-struct bpf_object *obj;
-struct xsknf_config config;
-struct pkt_5tuple flows[16];
-struct common_synack_opt sa_opts[16];
+static struct bpf_object *obj;
+static struct xsknf_config config;
 
-//uint32_t hash_seed = 1234;
-uint32_t change_key_duration = 0;
-uint16_t map_cookies[65536];
-uint32_t map_seeds[65536];
-__u64 client_mac_64 ; 
-__u64 server_mac_64 ;
-__u64 attacker_mac_64 ;
-__u64 client_r_mac_64 ;
-__u64 server_r_mac_64 ;
-__u64 attacker_r_mac_64 ;
-const int key0 = 0x33323130;
-const int key1 = 0x42413938;
-const int c0 = 0x70736575;
-const int c1 = 0x6e646f6d;
-const int c2 = 0x6e657261;
-const int c3 = 0x79746573;
+/*  Different instance for each workers, at most 16 workers */
+static struct pkt_5tuple flows[16];
+static struct common_synack_opt sa_opts[16];
 
-uint32_t client_ip;
-uint32_t server_ip;
-uint32_t attacker_ip;
+
+static uint32_t change_key_duration = 0;
+static uint16_t map_cookies[65536];
+static uint32_t map_seeds[65536];
+
+static uint64_t client_mac_64 ; 
+static uint64_t server_mac_64 ;
+static uint64_t attacker_mac_64 ;
+static uint64_t client_r_mac_64 ;
+static uint64_t server_r_mac_64 ;
+static uint64_t attacker_r_mac_64 ;
+static uint32_t client_ip;
+static uint32_t server_ip;
+static uint32_t attacker_ip;
+
+/* Hsiphash's constant  */
+static const int key0 = 0x33323130;
+static const int key1 = 0x42413938;
+static const int c0 = 0x70736575;
+static const int c1 = 0x6e646f6d;
+static const int c2 = 0x6e657261;
+static const int c3 = 0x79746573;
 
 extern int global_workers_num;
 
@@ -132,9 +132,6 @@ static uint32_t hsiphash(uint32_t src, uint32_t dst, uint16_t src_port, uint16_t
 	uint32_t hash = (v0^v1)^(v2^v3);
     return hash; 	
 }
-
-
-
 static uint64_t MACstoi(unsigned char* str){
     int last = -1;
     unsigned char a[6];
@@ -150,8 +147,6 @@ static uint64_t MACstoi(unsigned char* str){
         (uint32_t)(a[0]));
     
 }
-
-
 static void init_MAC(){
 	
 	client_mac_64 = MACstoi(CLIENT_MAC);
@@ -170,13 +165,13 @@ static __always_inline int forward(struct ethhdr* eth, struct iphdr* ip){
 		__builtin_memcpy(eth->h_dest, &client_mac_64,6);
 		
 
-		return CLIENT_R_IF;
+		return CLIENT_R_IF_ORDER;
 	}
 	else if (ip->daddr == server_ip){
 		__builtin_memcpy(eth->h_source, &server_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &server_mac_64,6);
 		
-		return SERVER_R_IF;
+		return SERVER_R_IF_ORDER;
 	}
 	// TO attacker
 	else if (ip->daddr == attacker_ip){
@@ -184,12 +179,10 @@ static __always_inline int forward(struct ethhdr* eth, struct iphdr* ip){
 		__builtin_memcpy(eth->h_dest, &attacker_mac_64,6);
 		
 
-		return ATTACKER_R_IF;
+		return ATTACKER_R_IF_ORDER;
 	}
 	else return -1;
 }
-
-
 static __always_inline __u16 get_map_cookie(__u32 ipaddr){
 
 	uint16_t seed_key = ipaddr & 0xffff;
@@ -197,10 +190,12 @@ static __always_inline __u16 get_map_cookie(__u32 ipaddr){
 	return map_cookies[cookie_key];
 }
 static __always_inline __u16 get_map_cookie_fnv(__u32 ipaddr){
-
+    
+    uint32_t le_ip = ntohl(ipaddr);
 	uint16_t seed_key = ipaddr & 0xffff;
-	__u16 cookie_key = fnv_32_buf(&ipaddr,4,map_seeds[seed_key]);
-	return map_cookies[cookie_key];
+	__u32 cookie_key = fnv_32_buf(&le_ip,4,map_seeds[seed_key]);
+    cookie_key = htonl(cookie_key);
+	return map_cookies[cookie_key >> 16];
 }
 static void init_global_maps(){
 	for(int i=0;i<65536;i++){
@@ -209,7 +204,7 @@ static void init_global_maps(){
 	}
 }
 
-
+/* Main packet processing logic*/
 int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, unsigned worker_id)
 {
 	
@@ -230,16 +225,17 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 		return forward(eth,ip);
 	}
 	
-
+    /*  Inbound packet    */
 	if(ingress_ifindex == 0){
 		flows[worker_id].src_ip = ip->saddr;
 	    flows[worker_id].dst_ip = ip->daddr;
 		flows[worker_id].src_port = tcp->source;
 		flows[worker_id].dst_port = tcp->source;
-
-
+        
+        /*  Ingrss SYN packet*/
 		if(tcp->syn && (!tcp->ack)) {
-			// Find out timestamp offset
+			
+            /*  Parse timestamp */
 			struct tcp_opt_ts* ts;
 			int opt_ts_offset = 0;
 			if(timestamp_option == TS_ON){
@@ -254,41 +250,36 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 				return -1;
 			}
 			
-			// Store rx pkt's tsval, then pur to ts.ecr
+			/*  Store old option and header info, then put a new synack option,
+                also put ts.ecr = rx_ts.val, and ts.val = TS_START  */
 			uint32_t rx_tsval = ts->tsval;
-
-			// Remove old tcp option part and replace to common_syn_ack option.
-			// Then adjust the packet length
 			int delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_synack_opt)) - (tcp->doff*4);
 			__u16 old_ip_totlen = ip->tot_len;
 			__u16 new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
-
-
+            
+            /*  Default sa_opts's ts.val == TS_START    */
 			sa_opts[worker_id].ts.tsecr = rx_tsval;
-			
 			__builtin_memcpy(tcp_opt,&sa_opts[worker_id],sizeof(struct common_synack_opt));
 
-			// Update length information 
+			/*  Update length information    */ 
 			ip->tot_len = new_ip_totlen;
 			tcp->doff += delta/4 ;
 			(*len) += delta;
 
-			// Modify iphdr
+			/*  Swap address    */
 			ip->saddr ^= ip->daddr;
 			ip->daddr ^= ip->saddr;
 			ip->saddr ^= ip->daddr;
 			
-			// since we modify ip.totalen. We need to update ip_csum
+			/*  Update ip's csum since we modify the ip.totlen  */
 			__u32 ip_csum = ~csum_unfold(ip->check);
 			ip_csum = csum_add(ip_csum,~old_ip_totlen);
 			ip_csum = csum_add(ip_csum,new_ip_totlen);
 			ip->check = ~csum_fold(ip_csum);
 			
-			
-			__u32 rx_seq = tcp->seq;
 
-			// Get flow's syncookie (by haraka256)
-			// Conver syn packet to synack, and put syncookie
+            /*  Put syncookie into seq# and swap rx_seq# +1 to ack#    */
+			__u32 rx_seq = tcp->seq;
 			uint32_t hashcookie = 0;
 			if(hash_option == HARAKA)
 				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
@@ -303,6 +294,9 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 
 			tcp->syn = 1;
 			tcp->ack = 1;
+
+            /*  Recompute the csum, might be optimize by pre-calculate the csum
+                of sa_opt   */
 			if(tcpcsum_option == CSUM_ON)
 				tcp->check = cksumTcp(ip,tcp);
 			if(opt_pressure == 1)
@@ -310,7 +304,11 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 
 			return forward(eth,ip);
 		}
+
+        /*  Ingress ACK     */
 		else if(tcp->ack && !(tcp->syn)){
+
+            /*  Parse timestamp */
 			struct tcp_opt_ts* ts;
 			int opt_ts_offset = parse_timestamp(tcp); 
 			if(opt_ts_offset < 0) return -1;
@@ -318,11 +316,9 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			if((void*)(ts + 1) > pkt_end){
 				return -1;
 			}
+
+            /*  If timestamp == TS_START, validate syncookie  */
 			uint32_t hashcookie = 0;
-			// printf("%u\n",map_seeds[(ip->saddr & 0xffff)]);
-			// if ts.ecr =TS_START
-			// Packet for three way handshake, and client's first request which not receive corresponding ack.
-			// Can still use syncookie to validate packet  
 			if (ts->tsecr == TS_START){
 				if(hash_option == HARAKA)
 					haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
@@ -335,7 +331,8 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 					return -1;
 				}
 			}
-			// Other ack packet. Validate hybrid_cookie
+
+			/*  Other ack packet, validate map_cookie    */
 			else{
 				uint32_t hybrid_cookie = ntohl(ts->tsecr);
 				if(((hybrid_cookie & 0xffff) == get_map_cookie_fnv(ip->saddr))){
@@ -347,8 +344,10 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 					DEBUG_PRINT("Switch agent: Fail map_cookie, map cookie = %u, cal_map_cookie = %u\n"
 																				,hybrid_cookie & 0xffff
 																				,get_map_cookie_fnv(ip->saddr) );
+
+                    /*  If during change key process, check hash_cookie */
 					if(change_key_duration | opt_change_key){
-						DEBUG_PRINT("Switch agent: Change seed for %u\n",change_key_duration);
+						DEBUG_PRINT("Switch agent: Change seed for %ums\n",change_key_duration);
 						if(hash_option == HARAKA)
 							haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
 						if(hash_option == HSIPHASH)
@@ -357,28 +356,29 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 						hashcookie = (hashcookie >> 16) ^ (hashcookie & 0xffff);	
 						if(((hybrid_cookie >> 16) & 0x3fff) == (hashcookie & 0x3fff)){
 							DEBUG_PRINT("Switch agent: Pass hash_cookie\n");
-							//printf("pass hash cookie %u %u %u %u\n",flow.src_ip,flow.dst_ip,flow.src_port,flow.dst_port);
+							
 						}
 						else{
-							//printf("fail hash cookie %u %u %u %u\n",flow.src_ip,flow.dst_ip,flow.src_port,flow.dst_port);
 							DEBUG_PRINT("Switch agent: Fail hash_cookie, Drop packet\n");
 							return -1;
 						}
 					}
 					else{
-						//DEBUG_PRINT("%u\n",change_key_duration);
 						DEBUG_PRINT("Switch agent: Drop packet\n");
 						return -1;
 					}
 				}
 			}
 			return forward(eth,ip);
-			
 		}
 	}
 
-	// Ingress from router eth2 (outbound)
-	else{ 
+	/*  Outbound packet */
+	else{
+        
+        /*  Seed change packet tag by ECE, and change
+            1. Seeds for Fnv() of the crack IP.
+            2. cookies mapped by the crack IP.  */
 		if(tcp->ece){
 			DEBUG_PRINT("Receive change seed packet!\n");
 			uint16_t cookie_key = tcp->source;
@@ -386,7 +386,6 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			uint16_t seed_key = tcp->window;
 			uint32_t new_hash_seed = tcp->seq;
 			map_seeds[seed_key] = new_hash_seed;
-			//printf("hash_seed = %u\n",hash_seed);
 			change_key_duration = tcp->ack_seq;
 			map_cookies[cookie_key] = new_cookie;
 			return -1;
@@ -398,12 +397,12 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 
 
 static struct option long_options[] = {
-	{"action", required_argument, 0, 'c'},
 	{"hash-type", required_argument, 0, 'h'},
 	{"tcp-csum", required_argument, 0, 's'},
 	{"timestamp", required_argument, 0, 't'},
 	{"change-key",no_argument,0, 'k'},
 	{"pressure", no_argument, 0, 'p'},
+    {"forward", no_argument, 0, 'f'},
 	{"drop", no_argument, 0, 'd'},
 	{"quiet", no_argument, 0, 'q'},
 	{"extra-stats", no_argument, 0, 'x'},
@@ -416,7 +415,6 @@ static void usage(const char *prog)
 	const char *str =
 		"  Usage: %s [XSKNF_OPTIONS] -- [APP_OPTIONS]\n"
 		"  App options:\n"
-		"  -c, --action			'REDIRECT', 'DROP' packets or 'PASS' to network stack (default REDIRECT).\n"
 		"  -h, --hash-type		'HARAKA', 'HSIPHASH', 'OFF' for hash function of the Hash cookie.\n"
 		"  -s, --tcp-csum 		'ON', 'OFF', Turn on/off recompute TCP csum.\n"
 		"  -t, --timestamp 		'ON', 'OFF', Turn on/off parsing timestamp.\n"
@@ -443,19 +441,6 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 			break;
 
 		switch (c) {
-		case 'c':
-			if (!strcmp(optarg, "REDIRECT")) {
-				opt_action = ACTION_REDIRECT;
-			} else if (!strcmp(optarg, "DROP")) {
-				opt_action = ACTION_DROP;
-			} else if (!strcmp(optarg, "PASS")) {
-				opt_action = ACTION_PASS;
-			} else {
-				fprintf(stderr, "ERROR: invalid action %s\n", optarg);
-				usage(basename(app_path));
-			}
-			break;
-
 		case 'h':
 			if (!strcmp(optarg, "HARAKA")) {
 				hash_option = HARAKA;
@@ -555,18 +540,10 @@ int swich_agent (int argc, char **argv){
 
 		struct global_data global;
 		global.workers_num = global_workers_num;
-		switch (opt_action) {
-		case ACTION_REDIRECT:
-			global.action = XDP_TX;
-			break;
-		case ACTION_DROP:
-			global.action = XDP_DROP;
-			break;
-		case ACTION_PASS:
-			global.action = XDP_PASS;
-			break;
-		}
-		//global.double_macswap = opt_double_macswap;
+        global.client_r_if_order = CLIENT_R_IF_ORDER;
+        global.server_r_if_order = SERVER_R_IF_ORDER;
+        global.attacker_r_if_order = ATTACKER_R_IF_ORDER;
+
 		if (bpf_map_update_elem(global_fd, &zero, &global, 0)) {
 			fprintf(stderr, "ERROR: unable to initialize eBPF global data\n");
 			exit(EXIT_FAILURE);
@@ -580,6 +557,8 @@ int swich_agent (int argc, char **argv){
 	init_saopts();
 	init_MAC();
 	init_ip();
+
+    /*  Constant for Haraka */
 	load_constants();
 
 	xsknf_start_workers();
@@ -601,7 +580,6 @@ int swich_agent (int argc, char **argv){
 	}
 
 	xsknf_cleanup();
-
 	return 0;
 }
 

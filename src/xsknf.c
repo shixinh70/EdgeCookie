@@ -811,6 +811,7 @@ int xsknf_parse_args(int argc, char **argv, struct xsknf_config *config)
 				optarg[i] = 0;
 			}
 			config->interfaces[config->num_interfaces++] = optarg;
+          
 			break;
 		case 'p':
 			config->poll = 1;

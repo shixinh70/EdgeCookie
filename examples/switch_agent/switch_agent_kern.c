@@ -12,8 +12,9 @@
 #define ATTACKER_R_IF 5 //attacker
 
 struct global_data {
-	int action;
-	int double_macswap;
+    int client_r_if_order;
+    int server_r_if_order;
+    int attacker_r_if_order;
 	int workers_num;
 };
 
@@ -37,6 +38,12 @@ struct {
 } xsks SEC(".maps");
 
 struct global_data global = {0};
+static int init = 0;
+static int workers;
+static int client_r_if_order;
+static int server_r_if_order;
+static int attacker_r_if_order;
+
 
 SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 {
@@ -48,6 +55,15 @@ SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 	 * work in combined mode.
 	 * In pure XDP the redirect will fail and the packet will be sent back.
 	 */
+
+    if (!init){
+        client_r_if_order = global.client_r_if_order;
+        server_r_if_order = global.server_r_if_order;
+        attacker_r_if_order = global.attacker_r_if_order;
+        workers = global.workers_num;
+        init = 1 ;
+    }
+
 	struct ethhdr *eth = data;
 	if ((void *)(eth + 1) > data_end) {
 		return XDP_ABORTED;
@@ -60,18 +76,14 @@ SEC("xdp") int handle_xdp(struct xdp_md *ctx)
 		
 		if(ip->protocol == IPPROTO_TCP){
 			
-			
 			if(ctx->ingress_ifindex == CLIENT_R_IF){
-				
-				return bpf_redirect_map(&xsks, ctx->rx_queue_index, XDP_PASS);
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index + (workers -1)* (client_r_if_order), XDP_PASS);
 			}
 			else if (ctx->ingress_ifindex == SERVER_R_IF){
-				return bpf_redirect_map(&xsks, ctx->rx_queue_index + global.workers_num -1, XDP_PASS);
-
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index + (workers -1)* (server_r_if_order), XDP_PASS);
 			}
-			else if (ctx->ingress_ifindex == ATTACKER_R_IF)
-			{
-				return bpf_redirect_map(&xsks, ctx->rx_queue_index, XDP_PASS);
+			else if (ctx->ingress_ifindex == ATTACKER_R_IF){
+				return bpf_redirect_map(&xsks, ctx->rx_queue_index + (workers -1)* (attacker_r_if_order), XDP_PASS);
 			}
 			
 		}
