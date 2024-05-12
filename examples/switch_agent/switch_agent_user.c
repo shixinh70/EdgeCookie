@@ -218,6 +218,10 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 	struct tcphdr* tcp = (struct tcphdr*)(ip +1);
 	void* tcp_opt = (void*)(tcp + 1);
 	
+    if(eth->h_proto != bpf_htons(ETH_P_IP) && ip->protocol != IPPROTO_TCP){
+        return -1;
+    }
+
 	if(opt_forward){
 		ip->saddr ^= ip->daddr;
 		ip->daddr ^= ip->saddr;
@@ -336,9 +340,9 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			else{
 				uint32_t hybrid_cookie = ntohl(ts->tsecr);
 				if(((hybrid_cookie & 0xffff) == get_map_cookie_fnv(ip->saddr))){
-					DEBUG_PRINT("Switch agent: Pass map_cookie, map cookie = %u, cal_map_cookie = %u\n"
-																				,hybrid_cookie & 0xffff
-																				,get_map_cookie_fnv(ip->saddr) );
+					// DEBUG_PRINT("Switch agent: Pass map_cookie, map cookie = %u, cal_map_cookie = %u\n"
+					// 															,hybrid_cookie & 0xffff
+					// 															,get_map_cookie_fnv(ip->saddr) );
 				}
 				else{
 					DEBUG_PRINT("Switch agent: Fail map_cookie, map cookie = %u, cal_map_cookie = %u\n"
