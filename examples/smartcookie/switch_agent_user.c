@@ -1,4 +1,4 @@
-#include "smartcookie.h"
+#include "switch_agent.h"
 
 
 static int benchmark_done;
@@ -350,14 +350,14 @@ static void usage(const char *prog)
 	const char *str =
 		"  Usage: %s [XSKNF_OPTIONS] -- [APP_OPTIONS]\n"
 		"  App options:\n"
-		"  -c, --connection	    <N>, Generate N random flow into bloomfilter.\n"
-        "  -o, --option-enable  Deal with all the tcp option.\n"
-		"  -p, --pressure       Receive a SYN packet and caculate syncookie then DROP!\n"
-		"  -f, --foward			Only foward packet in packet proccessor\n"
-		"  -d, --drop 			Only drop packet in packet proccessor.\n"
-		"  -q, --quiet			Do not display any stats.\n"
-		"  -x, --extra-stats    Display extra statistics.\n"
-		"  -a, --app-stats		Display application (syscall) statistics.\n"
+		"  -c, --connection       <N>, Generate N random flow into bloomfilter.\n"
+        "  -o, --option-enable    Deal with all the tcp option.\n"
+		"  -p, --pressure         Receive a SYN packet and caculate syncookie then DROP!\n"
+		"  -f, --foward           Only foward packet in packet proccessor\n"
+		"  -d, --drop             Only drop packet in packet proccessor.\n"
+		"  -q, --quiet            Do not display any stats.\n"
+		"  -x, --extra-stats      Display extra statistics.\n"
+		"  -a, --app-stats        Display application (syscall) statistics.\n"
 		"\n";
 	fprintf(stderr, str, prog);
 
@@ -427,7 +427,7 @@ int swich_agent (int argc, char **argv){
 
 	if (config.working_mode & MODE_XDP) {
 		struct bpf_map *global_map = bpf_object__find_map_by_name(obj,
-				"smartcoo.bss");
+				"switch_a.bss");
 		if (!global_map) {
 			fprintf(stderr, "ERROR: unable to retrieve eBPF global data\n");
 			exit(EXIT_FAILURE);

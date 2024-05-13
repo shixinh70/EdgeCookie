@@ -37,10 +37,10 @@ XSKNF_C      := $(XSKNF_DIR)/xsknf.c
 XSKNF_O      := ${XSKNF_C:.c=.o}
 XSKNF_TARGET := $(XSKNF_DIR)/libxsknf.a
 
-EXAMPLES := switch_agent/switch_agent			\
-			switch_agent/server_in			\
-			switch_agent/server_en			\
-			smartcookie/smartcookie 			\
+EXAMPLES := htscookie/switch_agent			\
+			htscookie/server_in			\
+			htscookie/server_en			\
+			smartcookie/switch_agent 			\
 			smartcookie/server_in	\
 			smartcookie/server_en		\
 			# lbfw/lbfw					\
@@ -115,7 +115,7 @@ $(XSKNF_O): $(XSKNF_C) $(XSKNF_H) $(OBJECT_LIBXDP) $(OBJECT_LIBBPF)
 $(XSKNF_TARGET): $(XSKNF_O)
 	$(AR) r -o $@ $(XSKNF_O)
 
-$(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF) ./examples/switch_agent/server.h
+$(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF) ./examples/htscookie/server.h ./examples/smartcookie/server.h
 	$(CLANG) -S \
 		-target bpf \
 		-Wall \
@@ -133,5 +133,5 @@ $(EXAMPLES_TARGETS): %: %_user.o %_kern.o %.h $(EXAMPLES_COMMON) $(XSKNF_TARGET)
 	$(CC) $@_user.o $(EXAMPLES_COMMON) -o $@ $(EXAMPLES_LD) $(CFLAGS) -funroll-all-loops
 	rm $@_user.o
 
-test: ./examples/switch_agent/test.c $(EXAMPLES_COMMON)
-	$(CC) ./examples/switch_agent/test.c $(EXAMPLES_COMMON_TEST) -o ./examples/switch_agent/test $(CFLAGS) -funroll-all-loops
+test: ./examples/htscookie/test.c $(EXAMPLES_COMMON)
+	$(CC) ./examples/htscookie/test.c $(EXAMPLES_COMMON_TEST) -o ./examples/htscookie/test $(CFLAGS) -funroll-all-loops

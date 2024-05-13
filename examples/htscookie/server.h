@@ -19,7 +19,7 @@
 #ifndef ROUTER_H
 #define ROUTER_H
 
-#ifdef DEBUG
+#if defined(DEBUGALL) || defined(DEBUGSEVER)
 #define DEBUG 1
 #else
 #define DEBUG 0
