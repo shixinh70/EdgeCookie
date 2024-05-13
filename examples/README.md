@@ -12,9 +12,9 @@ make
 ```
 If you want to turn on the debug message, you can make with
 ```
-make CFLAGS=-DDEBUGALL=1  // For all the debug message
-make CFLAGS=-DDEBUGSA=1  // For the switch_agent debug message
-make CFLAGS=-DDEBUGSERVER=1  // For the server_in and server_en debug message
+make CFLAGS=-DDEBUGALL=1      // For all the debug message
+make CFLAGS=-DDEBUGSA=1       // For the switch_agent debug message
+make CFLAGS=-DDEBUGSERVER=1   // For the server_in and server_en debug message
 ```
 ## Switch agent and sever_ingress, server_egress
 
