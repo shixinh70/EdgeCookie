@@ -2,8 +2,9 @@
 ## Dependency
 ```
 sudo apt update
-sudo apt install clang llvm libelf-dev libpcap-dev build-essential libc6-dev-i386 linux-tools-$(uname -r) linux-headers-$(uname -r) linux-tools-common linux-tools-generic tcpdump m4 libelf-dev zlib1g-dev libmnl-dev msr-tools -y
-
+sudo apt install clang llvm libelf-dev libpcap-dev build-essential libc6-dev-i386 \
+linux-tools-$(uname -r) linux-headers-$(uname -r) linux-tools-common linux-tools-generic \
+tcpdump m4 libelf-dev zlib1g-dev libmnl-dev msr-tools -y
 ```
 ## switch_agent application setup
 
