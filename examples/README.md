@@ -8,9 +8,9 @@ tcpdump m4 libelf-dev zlib1g-dev libmnl-dev msr-tools -y
 
 # Switch agent and sever_ingress, server_egress
 
-Both example include switch_agent, server_in.o, server_en.o.
+Both example include switch_agent, server_in.o, server_en.o
 ## switch_agent
-Before compile this application, please manully set the `MAC` ,`IP` , and the `interfaces' order` in switch_agent.h.
+Before compile this application, please manully set the `MAC` ,`IP` , and the `interfaces' order` in switch_agent.h  
 Take the example below, the eth0's order will be 0 and eth1 will be 1.  
 CLIENT_R_MAC is the MAC of router's interface which conneted to client.
 
