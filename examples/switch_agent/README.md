@@ -21,20 +21,20 @@ The following arguments are currently supported by the library:
 -b, --batch-size=n  Batch size for sending or receiving packets. Default is 64
 -B, --busy-poll     Busy poll
 -M  --mode          Working mode (AF_XDP, XDP, COMBINED)
--w  --workers=n    Number of packet processing workers
+-w  --workers=n     Number of packet processing workers
 ```
 And the arguments are currently supported by the HTSCookie switch agent application:
 ```
--h, --hash-type  'HARAKA', 'HSIPHASH', 'OFF' for hash function of the Hash cookie, default HARAKA.
--s, --tcp-csum 'ON', 'OFF', Turn on/off recompute TCP csum, default ON.
--t, --timestamp 		'ON', 'OFF', Turn on/off parsing timestamp, default ON.
--k  --change-key    Enable switch_agent to validate two cookies.
--p, --pressure 	    Receive a SYN packet and caculate syncookie then DROP.
--f, --foward			  Only foward packet to the corresponding interface.
--d, --drop 			    Only drop packet after receive the packet.
--q, --quiet			    Do not display any stats.
--x, --extra-stats	  Display extra statistics.
--a, --app-stats		  Display application (syscall) statistics.
+-h, --hash-type     'HARAKA', 'HSIPHASH', 'OFF' for hash function of the Hash cookie, default HARAKA
+-s, --tcp-csum      'ON', 'OFF', Turn on/off recompute TCP csum, default ON
+-t, --timestamp     'ON', 'OFF', Turn on/off parsing timestamp, default ON
+-k  --change-key    Enable switch_agent to validate two cookies
+-p, --pressure      Receive a SYN packet and caculate syncookie then DROP
+-f, --foward        Only foward packet to the corresponding interface
+-d, --drop          Only drop packet after receive the packet
+-q, --quiet         Do not display any stats
+-x, --extra-stats   Display extra statistics
+-a, --app-stats     Display application (syscall) statistics
 ```
 For example it can be run in the follwing way:
 ```
