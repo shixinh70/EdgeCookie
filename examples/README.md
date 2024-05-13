@@ -15,7 +15,7 @@ Take the example below, the eth0's order will be 0 and eth1 will be 1.
 CLIENT_R_MAC is the MAC of router's interface which conneted to client.
 
 ## server_in.o and server_en.o
-Before compile ebpf object file, please manully set the `redirect interface` of server, and the `XDP mode` correspond with swtich_agent.  
+Before compile ebpf object file, please manully set the `redirect interface` of server, and the `XDP mode` correspond with swtich_agent in server.h  
 You can bind the ebpf by the link.sh or /link_skb.sh script.
 Usage:
 ```
