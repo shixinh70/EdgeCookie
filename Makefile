@@ -28,6 +28,8 @@ LIBBPF_INCLUDE_DIR := $(LIBBPF_DIR)/root/usr/include
 override CFLAGS += -I./src -I./headers -I$(LIBXDP_INCLUDE_DIR) \
 				   -I$(LIBBPF_INCLUDE_DIR) -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer
 
+
+DEBUG_CFLAGS := -DDEBUG
 # Configure library paths
 XSKNF_DIR    := ./src
 XSKNF_H      := $(XSKNF_DIR)/xsknf.h
@@ -77,8 +79,11 @@ EXAMPLES_COMMON_TEST  := 	$(EXAMPLES_DIR)/common/haraka.o\
 
 all: llvm-check update_submodules $(XSKNF_TARGET) $(EXAMPLES_TARGETS) test
 
+
 update_submodules:
 	git submodule update --init --recursive
+
+
 
 clean:
 	# $(MAKE) -C ./xdp-tools clean
@@ -126,7 +131,7 @@ $(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF) ./examples/switch_agen
 
 $(EXAMPLES_TARGETS): %: %_user.o %_kern.o %.h $(EXAMPLES_COMMON) $(XSKNF_TARGET)
 	$(CC) $@_user.o $(EXAMPLES_COMMON) -o $@ $(EXAMPLES_LD) $(CFLAGS) -funroll-all-loops
-
+	rm $@_user.o
 
 test: ./examples/switch_agent/test.c $(EXAMPLES_COMMON)
 	$(CC) ./examples/switch_agent/test.c $(EXAMPLES_COMMON_TEST) -o ./examples/switch_agent/test $(CFLAGS) -funroll-all-loops

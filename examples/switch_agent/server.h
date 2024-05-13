@@ -19,7 +19,12 @@
 #ifndef ROUTER_H
 #define ROUTER_H
 
+#ifdef DEBUG
+#define DEBUG 1
+#else
 #define DEBUG 0
+#endif
+
 #define DEBUG_PRINT(fmt, ...) \
 	if (DEBUG)                \
 	bpf_printk(fmt, ##__VA_ARGS__)
