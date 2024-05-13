@@ -1,6 +1,11 @@
 # HTSCookie - Switch agent and sever_ingress, server_egress
+## Dependency
+```
+sudo apt update
+sudo apt install clang llvm libelf-dev libpcap-dev build-essential libc6-dev-i386 linux-tools-$(uname -r) linux-headers-$(uname -r) linux-tools-common linux-tools-generic tcpdump m4 libelf-dev zlib1g-dev libmnl-dev msr-tools -y
 
-## Application setup
+```
+## switch_agent application setup
 
 Before compile this application, please manully set the MAC ,IP , and the interfaces' order in [./switch_agent.h](./switch_agent.h) .
 Take the example below, the eth0's order will be 0 and eth1 will be 1.
@@ -41,5 +46,8 @@ For example it can be run in the follwing way:
 sudo ./switch_agent -i eth0 -i eth1 -S -- -h HSIPHASH -q
 ```
 This command tells XSKNF to use interfaces `ens1f0` and `ens1f1` (`-i`), and XDP running in a SKB mode. Application will print no periodic statistics (`-q`) and calculate the syncookie by Hafl-siphash (`-h HSIPHASH`).
+
+## ## server_in.o and server_en.o setup
+
 
 
