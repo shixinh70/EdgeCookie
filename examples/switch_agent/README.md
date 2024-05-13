@@ -33,7 +33,7 @@ And the arguments are currently supported by the HTSCookie switch agent applicat
 -h, --hash-type     'HARAKA', 'HSIPHASH', 'OFF' for hash function of the Hash cookie, default HARAKA
 -s, --tcp-csum      'ON', 'OFF', Turn on/off recompute TCP csum, default ON
 -t, --timestamp     'ON', 'OFF', Turn on/off parsing timestamp, default ON
--k  --change-key    Enable switch_agent to validate two cookies
+-k  --change-key    Enable switch_agent to validate two cookies, default OFF
 -p, --pressure      Receive a SYN packet and caculate syncookie then DROP
 -f, --foward        Only foward packet to the corresponding interface
 -d, --drop          Only drop packet after receive the packet
