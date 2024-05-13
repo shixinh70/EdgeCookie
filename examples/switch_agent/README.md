@@ -46,10 +46,13 @@ For example it can be run in the follwing way:
 ```
 sudo ./switch_agent -i eth0 -i eth1 -S -- -h HSIPHASH -q
 ```
-This command tells XSKNF to use interfaces `ens1f0` and `ens1f1` (`-i`), and XDP running in a SKB mode. Application will print no periodic statistics (`-q`) and calculate the syncookie by Hafl-siphash (`-h HSIPHASH`).
+This command tells XSKNF to use interfaces `ens1f0` and `ens1f1` (`-i`), and XDP running in a SKB mode.
+
+Application will print no periodic statistics (`-q`) and calculate the syncookie by Hafl-siphash (`-h HSIPHASH`).
 
 ## server_in.o and server_en.o setup
 Before compile ebpf object file, please manully set the redirect interface of server, and the XDP mode correspond with swtich_agent.
+
 You can bind the ebpf by the [./link.sh](/.link.sh) or [./link.skb](./link_skb.sh) script.
 Usage:
 ```
