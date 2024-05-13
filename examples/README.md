@@ -1,20 +1,33 @@
 # Switch agent and sever_ingress, server_egress
-## Dependency
+
+Both example include switch_agent, server_in.o, server_en.o.
+## switch_agent
+Before compile this application, please manully set the MAC ,IP , and the interfaces' order in switch_agent.h.
+Take the example below, the eth0's order will be 0 and eth1 will be 1.  
+CLIENT_R_MAC is the MAC of router's interface which conneted to client.
+
+## server_in.o and server_en.o
+Before compile ebpf object file, please manully set the (`redirect interface`) of server, and the (`XDP mode`) correspond with swtich_agent.  
+You can bind the ebpf by the link.sh or /link_skb.sh script.
+Usage:
+```
+sudo ./link.sh <interfcae> <1|0>
+## 1 for load and 0 for unload 
+```
+
+
+# Dependency
 ```
 sudo apt update
 sudo apt install clang llvm libelf-dev libpcap-dev build-essential libc6-dev-i386 \
 linux-tools-$(uname -r) linux-headers-$(uname -r) linux-tools-common linux-tools-generic \
 tcpdump m4 libelf-dev zlib1g-dev libmnl-dev msr-tools -y
 ```
-## switch_agent application setup
-
-Before compile this application, please manully set the MAC ,IP , and the interfaces' order in [./switch_agent.h](./switch_agent.h) .
-Take the example below, the eth0's order will be 0 and eth1 will be 1.  
-CLIENT_R_MAC is the MAC of router's interface which conneted to client. 
+# XSKNF library and XSKNF-specifict application arguments
 
 A typical application based on XSKNF can be called with a set of XSKNF-specific arguments, followed by a double hypen (`--`), followed by a set of application-specific arguments (in a similar way to how DPDK applications are invoked).
 
-The following arguments are currently supported by the library:
+The following arguments are currently supported by the XSKNF library:
 
 ```
 -i, --iface=n[:m]   Interface to operate on (a copy mode between copy (c) or zero-copy (z)
@@ -28,7 +41,7 @@ The following arguments are currently supported by the library:
 -M  --mode          Working mode (AF_XDP, XDP, COMBINED)
 -w  --workers=n     Number of packet processing workers
 ```
-And the arguments are currently supported by the HTSCookie application:
+And the application-specific argumemnts, take HTScookie as a example:
 ```
 -h, --hash-type     'HARAKA', 'HSIPHASH', 'OFF' for hash function of the Hash cookie, default HARAKA
 -s, --tcp-csum      'ON', 'OFF', Turn on/off recompute TCP csum, default ON
@@ -48,12 +61,5 @@ sudo ./switch_agent -i eth0 -i eth1 -S -- -h HSIPHASH -q
 This command tells XSKNF to use interfaces `ens1f0` and `ens1f1` (`-i`), and XDP running in a SKB mode.  
 Application will print no periodic statistics (`-q`) and calculate the syncookie by Hafl-siphash (`-h HSIPHASH`).
 
-## server_in.o and server_en.o setup
-Before compile ebpf object file, please manully set the redirect interface of server, and the XDP mode correspond with swtich_agent.  
-You can bind the ebpf by the [./link.sh](/.link.sh) or [./link.skb](./link_skb.sh) script.
-Usage:
-```
-sudo ./link.sh <interfcae> <1|0>
-## 1 for load and 0 for unload 
-```
+
 
