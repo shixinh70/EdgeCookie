@@ -44,7 +44,7 @@ static void init_saopts(){
 	for(int i=0; i< global_workers_num;i++){
 		sa_opts[i].MSS = 0x18020402;
 		sa_opts[i].SackOK = 0x0204;
-		sa_opts[i].ts.tsval = TS_START;
+		sa_opts[i].ts.tsval = 1;
 		sa_opts[i].ts.kind = 8;
 		sa_opts[i].ts.length = 10;
 	}
@@ -144,13 +144,13 @@ static __always_inline int forward(struct ethhdr* eth, struct iphdr* ip){
 		__builtin_memcpy(eth->h_dest, &client_mac_64,6);
 		
 
-		return CLIENT_R_IF;
+		return CLIENT_R_IF_ORDER;
 	}
 	else if (ip->daddr == server_ip){
 		__builtin_memcpy(eth->h_source, &server_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &server_mac_64,6);
 		
-		return SERVER_R_IF;
+		return SERVER_R_IF_ORDER;
 	}
 	// TO attacker
 	else if (ip->daddr == attacker_ip){
@@ -158,7 +158,7 @@ static __always_inline int forward(struct ethhdr* eth, struct iphdr* ip){
 		__builtin_memcpy(eth->h_dest, &attacker_mac_64,6);
 		
 
-		return ATTACKER_R_IF;
+		return ATTACKER_R_IF_ORDER;
 	}
 	else return -1;
 }
@@ -231,7 +231,10 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 
 
                 sa_opts[worker_id].ts.tsecr = rx_tsval;
-                sa_opts[worker_id].ts.tsval = htonl((uint32_t)clock());
+                /*  ts.tsval should be switch_agent's clock, but access clock will 
+                    get very bad performance, so just give a contant*/
+
+                sa_opts[worker_id].ts.tsval = 1; //htonl((uint32_t)clock());
                 __builtin_memcpy(tcp_opt,&sa_opts[worker_id],sizeof(struct common_synack_opt));
 
                 // Update length information 
@@ -309,8 +312,8 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 	else{
         // clone Packet sent from server agent.(still fail)
 		if(tcp->ece){
-            printf("%u\n",ingress_ifindex);
-            printf("receive ece\n");
+            // printf("%u\n",ingress_ifindex);
+            // printf("receive ece\n");
             flows[worker_id].src_ip = ip->daddr;
             flows[worker_id].dst_ip = ip->saddr;
             flows[worker_id].src_port = tcp->dest;
@@ -321,7 +324,9 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
         else if (tcp->ack){
             if(ts){
                 uint32_t old_ts_val = ts->tsval;
-                ts->tsval = htonl((uint32_t)clock());
+                /*  ts.tsval should be switch_agent's clock, but access clock will 
+                    get very bad performance, so just give a contant*/
+                ts->tsval =1; //htonl((uint32_t)clock());
                 __u32 tcp_csum = ~csum_unfold(tcp->check);
                 tcp_csum = csum_add(tcp_csum,~old_ts_val);
                 tcp_csum = csum_add(tcp_csum,ts->tsval);
@@ -442,8 +447,10 @@ int swich_agent (int argc, char **argv){
 
 		struct global_data global;
 		global.workers_num = global_workers_num;
+		global.client_r_if_order = CLIENT_R_IF_ORDER;
+        global.server_r_if_order = SERVER_R_IF_ORDER;
+        global.attacker_r_if_order = ATTACKER_R_IF_ORDER;
 		
-		//global.double_macswap = opt_double_macswap;
 		if (bpf_map_update_elem(global_fd, &zero, &global, 0)) {
 			fprintf(stderr, "ERROR: unable to initialize eBPF global data\n");
 			exit(EXIT_FAILURE);

@@ -25,7 +25,7 @@ LIBBPF_INCLUDE_DIR := $(LIBBPF_DIR)/root/usr/include
 
 
 # Allows to pass additional cflags from the make command
-override CFLAGS += -I./src -I./headers -I$(LIBXDP_INCLUDE_DIR) \
+override CFLAGS += -I./src -I./headers -I$(LIBXDP_INCLUDE_DIR) -I$(EXAMPLES_DIR) \
 				   -I$(LIBBPF_INCLUDE_DIR) -I./examples/common -O3 -flto -march=native  -fomit-frame-pointer
 
 
@@ -128,8 +128,8 @@ $(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF) ./examples/htscookie/s
 	$(LLC) -march=bpf  -filetype=obj -o $@ ${@:.o=.ll}
 	$(RM) ${@:.o=.ll}
 
-
-$(EXAMPLES_TARGETS): %: %_user.o %_kern.o %.h $(EXAMPLES_COMMON) $(XSKNF_TARGET)
+# Too lazy to set .o rule, so remove user.o every time, it will recompile for every make command.
+$(EXAMPLES_TARGETS): %: %_user.o %_kern.o %.h $(EXAMPLES_COMMON) $(XSKNF_TARGET) $(EXAMPLES_DIR)/common/address.h
 	$(CC) $@_user.o $(EXAMPLES_COMMON) -o $@ $(EXAMPLES_LD) $(CFLAGS) -funroll-all-loops
 	rm $@_user.o
 
