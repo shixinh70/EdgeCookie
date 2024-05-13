@@ -1,6 +1,11 @@
 # HTSCookie - Switch agent and sever_ingress, server_egress
 
 ## Application setup
+
+Before compile this application, please manully set the MAC ,IP , and the interfaces' order in [./switch_agent.h](./switch_agent.h) .
+Take the example below, the eth0's order will be 0 and eth1 will be 1.
+CLIENT_R_MAC is the MAC of router's interface which conneted to client. 
+
 A typical application based on XSKNF can be called with a set of XSKNF-specific arguments, followed by a double hypen (`--`), followed by a set of application-specific arguments (in a similar way to how DPDK applications are invoked).
 The following arguments are currently supported by the library:
 
@@ -33,8 +38,6 @@ For example it can be run in the follwing way:
 ```
 sudo ./switch_agent -i eth0 -i eth1 -S -- -h HSIPHASH -q
 ```
-This command tells XSKNF to use interfaces `ens1f0` and `ens1f1` (`-i`) and the application not to print periodic statistics (`-q`) and calculate the syncookie by Hafl-siphash (`-h HSIPHASH`).
+This command tells XSKNF to use interfaces `ens1f0` and `ens1f1` (`-i`), and XDP running in a SKB mode. Application will print no periodic statistics (`-q`) and calculate the syncookie by Hafl-siphash (`-h HSIPHASH`).
 
-Before run the (`make`) command, please manully set the MAC ,IP , and the interfaces' order in [./switch_agent.h](./switch_agent.h) .
-Take the example above, the eth0's order will be 0 and eth1 will be 1.
-If eth0 represent for client's 
+
