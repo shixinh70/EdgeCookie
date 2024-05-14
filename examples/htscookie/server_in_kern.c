@@ -1,5 +1,6 @@
 #include "server.h"
-#define DROPTEST 1
+
+#define DROPTEST 0
 #define DROP_THRESH 100000
 
 uint8_t init = 0;

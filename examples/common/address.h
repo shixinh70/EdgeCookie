@@ -11,7 +11,7 @@
 #define CLIENT_IP ("172.18.0.3")
 #define SERVER_IP ("172.19.0.3")
 #define ATTACKER_IP ("10.20.0.3")
-#define CLIENT_R_IF_ORDER 5
+#define CLIENT_R_IF_ORDER 0
 #define SERVER_R_IF_ORDER 1
 #define ATTACKER_R_IF_ORDER 1
 
