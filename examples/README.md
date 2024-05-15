@@ -20,13 +20,13 @@ make CFLAGS=-DDEBUGSERVER=1   // For the server_in and server_en debug message
 
 Both example include switch_agent, server_in.o, server_en.o
 ### switch_agent
-Before compile this application, please manully set the `MAC` ,`IP` , and the `interfaces' order` in [./example/common/address.h](./example/common/address.h)
+Before compile this application, please manully set the `MAC` ,`IP` , and the `interfaces' order` in [./common/address.h](./common/address.h)
 Take the example below, the eth0's order will be 0 and eth1 will be 1.  
 CLIENT_R_MAC is the MAC of router's interface which conneted to client.
 
 ### server_in.o and server_en.o
 Before compile ebpf object file, please manully set the `redirect interface` of server, and the `XDP mode` correspond with swtich_agent 
-also in [./example/common/address.h](./example/common/address.h)  
+also in [./common/address.h](./common/address.h)  
 You can bind the ebpf by the link.sh or /link_skb.sh script.  
 Usage:
 ```
