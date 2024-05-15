@@ -18,10 +18,8 @@ function configure(parser)
 	parser:option("-o --output", "Output file.")
 	parser:option("-c --core", "Number of cores."):default(1):convert(tonumber)
 	parser:option("-f --flows", "Number of flows (different src addr)"):default(1):convert(tonumber)
-	parser:option("-i --spread-flows", "Spread pass-through flows on N different destination IPs"):default(1):convert(tonumber)
-	parser:option("-g --drop-flows", "Number of to-be-dropped flows (different src addr)"):default(0):convert(tonumber)
-	parser:option("-d --drop-share", "Share of to-be-dropped packets"):default(0):convert(tonumber)
     parser:option("-a --ack-flood", "Start ack flood mode"):default(0):convert(tonumber)
+    parser:option("-b --incr-ts", "Incremental timestamp"):default(0):convert(tonumber)
 end
 
 function master(args)
@@ -46,8 +44,7 @@ function master(args)
 
 	for i=0,args.core-1 do
 		mg.startTask("loadSlave", txDev:getTxQueue(i), args.size - 4,
-		             args.flows, args.spread_flows, args.drop_flows,
-					 args.drop_share, i, args.ack_flood)
+		             args.flows, i, args.ack_flood, args.incr_ts)
 	end
 
 	mg.setRuntime(args.time)
@@ -82,13 +79,10 @@ function master(args)
 	end
 end
 
-function loadSlave(txQueue, size, flows, spread_flows, drop_flows, drop_share,
-				   seed, ack_flood)
+function loadSlave(txQueue, size, flows, seed, ack_flood, incr_ts)
 	math.randomseed(seed)
-	minRedirIp = parseIPAddress("10.0.0.0")
-	minDropIp = parseIPAddress("11.0.0.0")
-	minDstIp = parseIPAddress("172.0.0.1")
- 
+	minIp = parseIPAddress("10.0.0.0")
+    mints = 1
 	local mem = memory.createMemPool(function(buf)
 		buf:getTcpPacket():fill{ 
 			ethSrc = ETH_SRC,
@@ -103,7 +97,7 @@ function loadSlave(txQueue, size, flows, spread_flows, drop_flows, drop_share,
             tcpDataOffset = 8
 
 		}
-        if ack_flood==1 then
+        if ack_flood == 1 then
             buf:getTcpPacket():fill{
                 ethSrc = ETH_SRC,
                 ethDst = ETH_DST,
@@ -118,29 +112,31 @@ function loadSlave(txQueue, size, flows, spread_flows, drop_flows, drop_share,
             }
         end
 	end)
-	local bufs = mem:bufArray()
 
+	local bufs = mem:bufArray()
+    local tscounter = 1
 	while mg.running() do
 		bufs:alloc(size)
 
 		for i, buf in ipairs(bufs) do
 			local pkt = buf:getTcpPacket()
-			if drop_share > 0 and math.random() < drop_share then
-				srcIp = minDropIp
-				offset = math.random(0, drop_flows - 1)
-			else
-				srcIp = minRedirIp
-				offset = math.random(0, flows - 1)
-			end
+            
+            if flows > 1 then
+                srcIp = minIp
+                offset = math.random(0, flows - 1)
+                pkt.ip4.src:set(srcIp + offset)
+            end
             pkt.tcp:setNopOption(0)
             pkt.tcp:setNopOption(1)
-            pkt.tcp:setTSOption(2,1234,1234)
-			-- pkt.ip4.src:set(srcIp + offset)
-			-- pkt.ip4.dst:set(minDstIp + (offset % spread_flows))
+            pkt.tcp:setTSOption(2,1234,min_ts)
+            if incr_ts == 1 then
+                pkt.tcp:setTSOption(2,1234,(min_ts + tscounter) % 0xffffffff)
+                tscounter = incAndWrap(tscounter, 2^32)
+            end
+
 		end
 
 		bufs:offloadTcpChecksums()
-
 		txQueue:send(bufs)
 	end
 end
