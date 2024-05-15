@@ -1,6 +1,6 @@
 #include "server.h"
-#define SERVER_IF 28
-#define XDP_DRV 0
+#include "address.h"
+
 __u32 max_rtt = 0 ;
 char _license[] SEC("license") = "GPL";
 
@@ -103,8 +103,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                 bpf_map_update_elem(&conntrack_map_sc,&key,&val,BPF_EXIST);
 
                 // Swap src and dst
-                __u32 pkt_ip_src = ip->saddr;
-                __u32 pkt_ip_dst = ip->daddr;
+                
                 ip->saddr ^= ip->daddr;
                 ip->daddr ^= ip->saddr;
                 ip->saddr ^= ip->daddr;
@@ -156,17 +155,17 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                 }
                   
                 tcp->check = tcp_csum_tmp;
-                bpf_clone_redirect(skb,SERVER_IF,BPF_F_INGRESS);
+                return bpf_redirect(SERVER_IF,BPF_F_INGRESS);
 
 
                 /*  This part always fail, Switch agent won't get the tag packet,
                     and still have no idea to deal with it, and some how we cant 
                 direct memory access the packet (write and read) after clone it.   */
             
-                __u16 new_flags_n = bpf_htons(0x6050);  //doff = 6, ECE = 1
-                bpf_skb_store_bytes(skb, 14+20+12, &new_flags_n, sizeof(new_flags_n),0);
-                bpf_skb_store_bytes(skb, 14+12, &pkt_ip_src, sizeof(pkt_ip_src),0);
-                bpf_skb_store_bytes(skb, 14+16, &pkt_ip_dst, sizeof(pkt_ip_dst),0);
+                // __u16 new_flags_n = bpf_htons(0x6050);  //doff = 6, ECE = 1
+                // bpf_skb_store_bytes(skb, 14+20+12, &new_flags_n, sizeof(new_flags_n),0);
+                // bpf_skb_store_bytes(skb, 14+12, &pkt_ip_src, sizeof(pkt_ip_src),0);
+                // bpf_skb_store_bytes(skb, 14+16, &pkt_ip_dst, sizeof(pkt_ip_dst),0);
             }
 
             /*  For the outbound ack packet and others, eg. RST, 

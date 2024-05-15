@@ -189,7 +189,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                             /*  Situation 2 */
                             if((void*)tcp + (tcp->doff*4) != data_end){
                                 //TODO: remove all the data, current jsut drop.
-                                return -1;
+                                //return -1;
                             }
                         }
                     }
@@ -198,7 +198,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     else{
                         if((void*)tcp + (tcp->doff*4) != data_end){
                             //TODO: remove all the data, current just drop.
-                            return -1;
+                            //return -1;
                         }
                     }
 
