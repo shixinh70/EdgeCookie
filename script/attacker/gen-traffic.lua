@@ -4,8 +4,8 @@ local device = require "device"
 local stats  = require "stats"
 local log    = require "log"
 
-local ETH_SRC = "3c:fd:fe:04:c3:c2"
-local ETH_DST = "3c:fd:fe:04:b1:c2"
+local ETH_SRC = "3c:fd:fe:b4:fc:c4"
+local ETH_DST = "90:e2:ba:b3:21:71"
 
 function configure(parser)
 	parser:description("Generates traffic.")
@@ -87,8 +87,8 @@ function loadSlave(txQueue, size, flows, seed, ack_flood, incr_ts)
 		buf:getTcpPacket():fill{ 
 			ethSrc = ETH_SRC,
 			ethDst = ETH_DST,
-			ip4Src = "10.20.0.3",
-			ip4Dst = "10.20.0.2",
+			ip4Src = "10.18.0.4",
+			ip4Dst = "10.19.0.3",
 			tcpDst = 80,
 			tcpSyn = 1,
 			tcpSeqNumber = 1,
@@ -101,8 +101,8 @@ function loadSlave(txQueue, size, flows, seed, ack_flood, incr_ts)
             buf:getTcpPacket():fill{
                 ethSrc = ETH_SRC,
                 ethDst = ETH_DST,
-                ip4Src = "10.20.0.3",
-                ip4Dst = "10.20.0.2",
+                ip4Src = "10.18.0.4",
+                ip4Dst = "10.19.0.3",
                 tcpDst = 80,
                 tcpAck = 1,
                 tcpSeqNumber = 1,
@@ -128,9 +128,9 @@ function loadSlave(txQueue, size, flows, seed, ack_flood, incr_ts)
             end
             pkt.tcp:setNopOption(0)
             pkt.tcp:setNopOption(1)
-            pkt.tcp:setTSOption(2,1234,min_ts)
+            pkt.tcp:setTSOption(2,1234,mints)
             if incr_ts == 1 then
-                pkt.tcp:setTSOption(2,1234,(min_ts + tscounter) % 0xffffffff)
+                pkt.tcp:setTSOption(2,1234,(mints + tscounter) % 0xffffffff)
                 tscounter = incAndWrap(tscounter, 2^32)
             end
 

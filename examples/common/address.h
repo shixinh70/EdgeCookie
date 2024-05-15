@@ -15,7 +15,7 @@
 #define ATTACKER_IP ("10.20.0.3")
 #define CLIENT_R_IF_ORDER 0
 #define SERVER_R_IF_ORDER 1
-#define ATTACKER_R_IF_ORDER 1
+#define ATTACKER_R_IF_ORDER 0
 
 
 /*  For server_en, XDP_DRV set to 1 if bind to xdp-drive mode
@@ -23,6 +23,7 @@
     SERVER_IF to that number    */
 #define XDP_DRV 0
 #define SERVER_IF 28
+
 
 
 #endif
