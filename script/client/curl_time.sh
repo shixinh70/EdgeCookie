@@ -1,33 +1,33 @@
 #!/bin/bash
 
-# 檢查是否提供了正確的參數
+# Check if correct parameters are provided
 if [ $# -ne 1 ]; then
-    echo "使用方法: $0 <N>"
+    echo "Usage: $0 <N seconds>"
     exit 1
 fi
 
-# 設定計數器和總時間
+# Set counter and total time
 count=0
 total_time=0
 
-# 迭代N秒
+# Iterate for N seconds
 for (( i=0; i<$1; i++ )); do
-    # 使用curl計算時間
+    # Calculate time using curl
     result=$(curl -so /dev/null -w '%{time_total}\n' 10.19.0.3)
 
-    # 將時間加到總時間
+    # Add time to total time
     total_time=$(echo "$total_time + $result" | bc)
 
-    # 增加計數器
+    # Increment counter
     count=$((count+1))
 
-    # 暫停一秒
+    # Pause for one second
     sleep 1
 done
 
-# 計算平均時間
+# Calculate average time
 average_time=$(echo "scale=7; $total_time / $count" | bc)
 
-# 輸出結果
-echo "總時間: $total_time 秒"
-echo "平均時間: $average_time 秒"
+# Output results
+echo "Total time: $total_time seconds"
+echo "Average time: $average_time seconds"
