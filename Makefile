@@ -14,15 +14,6 @@ LIBBPF_SOURCES = $(wildcard $(LIBBPF_DIR)/*.[ch])
 OBJECT_LIBBPF := $(LIBBPF_DIR)/libbpf.a
 LIBBPF_INCLUDE_DIR := $(LIBBPF_DIR)/root/usr/include
 
-# LIBXDP_DIR := ./xdp-tools/lib/libxdp
-# LIBXDP_SOURCES := $(wildcard ./xdp-tools/lib/libxdp/*.c ./xdp-tools/lib/libxdp/*.h ./xdp-tools/lib/libxdp/*.in)
-# OBJECT_LIBXDP := ./xdp-tools/lib/libxdp/libxdp.a
-# LIBXDP_INCLUDE_DIR := ./xdp-tools/headers
-# LIBBPF_DIR := ./xdp-tools/lib/libbpf/src
-# LIBBPF_SOURCES := $(wildcard ./xdp-tools/lib/libbpf/src/*.c ./xdp-tools/lib/libbpf/src/*.h)
-# OBJECT_LIBBPF := ./xdp-tools/lib/libbpf/src/libbpf.a
-# LIBBPF_INCLUDE_DIR := ./xdp-tools/lib/libbpf/src/root/usr/include
-
 
 # Allows to pass additional cflags from the make command
 override CFLAGS += -I./src -I./headers -I$(LIBXDP_INCLUDE_DIR) -I$(EXAMPLES_DIR) \
@@ -37,11 +28,11 @@ XSKNF_C      := $(XSKNF_DIR)/xsknf.c
 XSKNF_O      := ${XSKNF_C:.c=.o}
 XSKNF_TARGET := $(XSKNF_DIR)/libxsknf.a
 
-EXAMPLES := htscookie/switch_agent			\
+EXAMPLES := htscookie/switch_agent		\
 			htscookie/server_in			\
 			htscookie/server_en			\
-			smartcookie/switch_agent 			\
-			smartcookie/server_in	\
+			smartcookie/switch_agent 	\
+			smartcookie/server_in		\
 			smartcookie/server_en		\
 			# lbfw/lbfw					\
 			# test_memory/test_memory
@@ -87,8 +78,8 @@ update_submodules:
 
 clean:
 	# $(MAKE) -C ./xdp-tools clean
-	# $(RM) $(XSKNF_O)
-	# $(RM) $(XSKNF_TARGET)
+	$(RM) $(XSKNF_O)
+	$(RM) $(XSKNF_TARGET)
 	$(RM) $(EXAMPLES_USER)
 	$(RM) $(EXAMPLES_TARGETS)
 	$(RM) $(EXAMPLES_KERN)
