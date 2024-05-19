@@ -36,11 +36,10 @@
 #else
 #define DEBUG 0
 #endif
-
 #define DEBUG_PRINT(fmt, ...) \
 	if (DEBUG)                \
 	printf(fmt, ##__VA_ARGS__)
-
+#define SEED 1234
 
 
 struct common_synack_opt

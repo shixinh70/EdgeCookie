@@ -22,7 +22,7 @@
     Check the server's interface by ip addr show, then set
     SERVER_IF to that number    */
 #define XDP_DRV 0
-#define SERVER_IF 28
+#define SERVER_IF 16
 
 
 

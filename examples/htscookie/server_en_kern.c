@@ -1,6 +1,5 @@
 #include "server.h"
-#define XDP_DRV 0
-#define SERVER_IF 28
+#include "address.h"
 __u32 max_rtt = 0 ;
 char _license[] SEC("license") = "GPL";
 

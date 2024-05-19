@@ -58,8 +58,13 @@ static void add_bf(){
     int len = 12;
     uint8_t flow[len];
 	for(int i =0;i<opt_add_connection;i++){
-        for(int i =0 ;i <len; i++)
-            flow[i] = rand()&0xff;
+        for(int j =0 ;j <3; j++){
+            int temp = rand();
+            memcpy (flow + j*4, &temp, 4);
+        }
+        // if(i == 7){
+        //     printf("%d\n", (flow[0] << 24) + (flow[1] << 16) + (flow[2] << 8) + flow[3]);
+        // }
         bloom_filter_put(bf_p,&flow,len);
     }
 }
@@ -423,7 +428,7 @@ int swich_agent (int argc, char **argv){
 	signal(SIGTERM, int_exit);
 	signal(SIGABRT, int_exit);
 	signal(SIGUSR1, int_usr);
-    srand(time(NULL));
+    srand(SEED);
 	xsknf_parse_args(argc, argv, &config);
 	strcpy(config.tc_progname, "handle_tc");
 	xsknf_init(&config, &obj);

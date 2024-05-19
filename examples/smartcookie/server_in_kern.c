@@ -122,9 +122,11 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
             
             if(tcphdr_len >= 32){ 
                 int opt_ts_offset = parse_timestamp(&cur,tcp,data_end,&ts);
+                DEBUG_PRINT("SERVER IN: Parse timestamp fail!\n");
                 if(opt_ts_offset == -1) return XDP_DROP;
                 
                 void* tcp_header_end = (void*)tcp + (tcp->doff*4);
+                DEBUG_PRINT("SERVER IN: Parse timestamp fail!\n");
                 if(tcp_header_end > data_end) return XDP_DROP;
             }
         
@@ -139,10 +141,11 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                 };
                 struct map_val_t val = {0};
                 struct map_val_t* val_p = bpf_map_lookup_elem(&conntrack_map_sc,&key);
+                //bpf_printk("SERVER IN: Do map_lookup_elem\n");
 
                 /*  If the flow has already exist, just
                     do the tcp handover, must be benign traffic. */
-                if(val_p){
+                if(val_p && (!tcp->ece)){
                     if(bpf_probe_read_kernel(&val,sizeof(val),val_p) != 0){
                             DEBUG_PRINT ("SERVER_IN: Read map_val fail!\n");
                             return XDP_DROP;
@@ -168,7 +171,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     tcp->check = csum_fold_helper_64(tcp_csum);
                 }
                 
-                /*  If no connection exist  */
+                /*  If no connection exist or has ece tag */
                 else{
 
                     /*  If no tag (not passing switch_agent's syncookie)
@@ -179,17 +182,18 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
 
                         /*  Check benign or malicious by syncookie  */
                         uint32_t syncookie = get_hash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
-
+                        //bpf_printk("SERVER IN: Do HSIPHASH\n");
                         /* Situation 1  */
                         if(bpf_htonl(bpf_ntohl(tcp->ack_seq)-1) != syncookie){
-                            return -1;
+                            //bpf_printk("SERVER IN: Syncookie fail!\n");
+                            return XDP_DROP;
                         }
                         else{
 
                             /*  Situation 2 */
                             if((void*)tcp + (tcp->doff*4) != data_end){
                                 //TODO: remove all the data, current jsut drop.
-                                //return -1;
+                                //return XDP_DROP;
                             }
                         }
                     }
@@ -198,7 +202,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     else{
                         if((void*)tcp + (tcp->doff*4) != data_end){
                             //TODO: remove all the data, current just drop.
-                            //return -1;
+                            //return XDP_DROP;
                         }
                     }
 
@@ -259,5 +263,6 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
             }
         } 
     }
+    DEBUG_PRINT ("SERVER IN : PASS\n");
     return XDP_PASS;
 }
