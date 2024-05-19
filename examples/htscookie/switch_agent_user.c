@@ -223,9 +223,9 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
     }
 
 	if(opt_forward){
-		ip->saddr ^= ip->daddr;
-		ip->daddr ^= ip->saddr;
-		ip->saddr ^= ip->daddr;
+		// ip->saddr ^= ip->daddr;
+		// ip->daddr ^= ip->saddr;
+		// ip->saddr ^= ip->daddr;
 		return forward(eth,ip);
 	}
 	

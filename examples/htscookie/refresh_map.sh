@@ -16,7 +16,7 @@ fi
 num="$1"
 
 # Execute commands
-./link_skb.sh eth0 0
-rm /sys/fs/bpf/xdp/globals/conntrack_map_sc
-./link_skb.sh eth0 1
+./link.sh eth0 0
+rm /sys/fs/bpf/xdp/globals/conntrack_map
+./link.sh eth0 1
 ./server_in $num

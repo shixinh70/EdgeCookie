@@ -4,8 +4,8 @@ local device = require "device"
 local stats  = require "stats"
 local log    = require "log"
 
-local ETH_SRC = "3c:fd:fe:b4:fc:c4"
-local ETH_DST = "90:e2:ba:b3:21:71"
+local ETH_SRC = "3c:fd:fe:b4:fb:2c"
+local ETH_DST = "90:e2:ba:b3:75:c0"
 
 function configure(parser)
 	parser:description("Generates traffic.")
@@ -78,11 +78,10 @@ function master(args)
 		file:close()
 	end
 end
-
 function loadSlave(txQueue, size, flows, seed, ack_flood, incr_ts)
 	math.randomseed(seed)
 	minIp = parseIPAddress("10.0.0.0")
-    mints = 1
+    -- mints = 1
 	local mem = memory.createMemPool(function(buf)
 		buf:getTcpPacket():fill{ 
 			ethSrc = ETH_SRC,
@@ -113,8 +112,8 @@ function loadSlave(txQueue, size, flows, seed, ack_flood, incr_ts)
         end
 	end)
 
+    local tscounter = 0
 	local bufs = mem:bufArray()
-    local tscounter = 1
 	while mg.running() do
 		bufs:alloc(size)
 
@@ -128,12 +127,10 @@ function loadSlave(txQueue, size, flows, seed, ack_flood, incr_ts)
             end
             pkt.tcp:setNopOption(0)
             pkt.tcp:setNopOption(1)
-            pkt.tcp:setTSOption(2,1234,mints)
-            if incr_ts == 1 then
-                pkt.tcp:setTSOption(2,1234,(mints + tscounter) % 0xffffffff)
-                tscounter = incAndWrap(tscounter, 2^32)
-            end
-
+            pkt.tcp:setTSOption(2,1234,(tscounter))
+            tscounter = tscounter + 1
+            tscounter = tscounter % 0xffffffff
+        
 		end
 
 		bufs:offloadTcpChecksums()

@@ -31,7 +31,7 @@
 
 #define TS_START bpf_ntohl(0x01010000)
 #define MAX_TCP_OPTION 10
-#define MAX_ENTRY 1000000
+#define MAX_ENTRY 700000
 
 
 

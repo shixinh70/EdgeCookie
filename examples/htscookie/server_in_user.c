@@ -38,9 +38,9 @@ int main(int argc, char** argv){
     }
 
     srand(SEED);
-    int fd = bpf_obj_get("/sys/fs/bpf/xdp/globals/conntrack_map_sc");
+    int fd = bpf_obj_get("/sys/fs/bpf/xdp/globals/conntrack_map");
     if(fd < 0 ){
-        fprintf(stderr,"WARN: Failed to open bpf map file: conntrack_map_sc err(%d):%s\n", errno, strerror(errno));
+        fprintf(stderr,"WARN: Failed to open bpf map file: conntrack_map err(%d):%s\n", errno, strerror(errno));
         exit(EXIT_FAILURE);
         
     }
