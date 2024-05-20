@@ -22,12 +22,12 @@ for (( i=0; i<$1; i++ )); do
     count=$((count+1))
 
     # Pause for one second
-    sleep 1
+    sleep 0.01
 done
 
 # Calculate average time
 average_time=$(echo "scale=7; $total_time / $count" | bc)
 
 # Output results
-echo "Total time: $total_time seconds"
+# echo "Total time: $total_time seconds"
 echo "Average time: $average_time seconds"
