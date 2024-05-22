@@ -23,6 +23,7 @@ static int opt_drop;
 static int opt_pressure;
 static int opt_forward;
 static int opt_change_key;
+static int opt_ab_test;
 
 /* Default Option setting   */
 static enum hash_options hash_option = HARAKA;
@@ -35,6 +36,7 @@ static struct xsknf_config config;
 /*  Different instance for each workers, at most 16 workers */
 static struct pkt_5tuple flows[16];
 static struct common_synack_opt sa_opts[16];
+static struct common_apache_opt sa_apache_opts[16];
 
 
 static uint32_t change_key_duration = 0;
@@ -71,13 +73,30 @@ static void init_salt(){
 }
 static void init_saopts(){
 	for(int i=0; i< global_workers_num;i++){
-		sa_opts[i].MSS = 0x18020402;
+		sa_opts[i].MSS = 0x18020402; // 536
 		sa_opts[i].SackOK = 0x0204;
 		sa_opts[i].ts.tsval = TS_START;
 		sa_opts[i].ts.kind = 8;
 		sa_opts[i].ts.length = 10;
 	}
 }
+
+
+static void init_sa_apache_opts(){
+	for(int i=0; i< global_workers_num;i++){
+		sa_apache_opts[i].MSS = 0xb4050402; //1460
+		sa_apache_opts[i].SackOK = 0x0204;
+		sa_apache_opts[i].ts.tsval = 0;
+		sa_apache_opts[i].ts.tsecr = 0;
+		sa_apache_opts[i].ts.kind = 8;
+		sa_apache_opts[i].ts.length = 10;
+        sa_apache_opts[i].nop = 1;
+        sa_apache_opts[i].wscale[0] = 3;
+        sa_apache_opts[i].wscale[1] = 3;
+        sa_apache_opts[i].wscale[2] = 7;
+	}
+}
+
 static void init_ip(){
 	client_ip = inet_addr (CLIENT_IP);
 	server_ip = inet_addr (SERVER_IP);
@@ -257,29 +276,40 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			/*  Store old option and header info, then put a new synack option,
                 also put ts.ecr = rx_ts.val, and ts.val = TS_START  */
 			uint32_t rx_tsval = ts->tsval;
-			int delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_synack_opt)) - (tcp->doff*4);
-			__u16 old_ip_totlen = ip->tot_len;
-			__u16 new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
-            
-            /*  Default sa_opts's ts.val == TS_START    */
-			sa_opts[worker_id].ts.tsecr = rx_tsval;
-			__builtin_memcpy(tcp_opt,&sa_opts[worker_id],sizeof(struct common_synack_opt));
+            uint32_t rx_tsecr = ts->tsecr;
+            ts->tsecr = rx_tsval;
+            ts->tsval = TS_START;
 
-			/*  Update length information    */ 
-			ip->tot_len = new_ip_totlen;
-			tcp->doff += delta/4 ;
-			(*len) += delta;
+
+            if(!opt_ab_test){
+                int delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_synack_opt)) - (tcp->doff*4);
+			    __u16 old_ip_totlen = ip->tot_len;
+			    __u16 new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
+            
+                /*  Default sa_opts's ts.val == TS_START    */
+			    sa_opts[worker_id].ts.tsecr = rx_tsval;
+			    __builtin_memcpy(tcp_opt,&sa_opts[worker_id],sizeof(struct common_synack_opt));
+
+			    /*  Update length information    */ 
+			    ip->tot_len = new_ip_totlen;
+			    tcp->doff += delta/4 ;
+			    (*len) += delta;
+
+                /*  Update ip's csum since we modify the ip.totlen  */
+                __u32 ip_csum = ~csum_unfold(ip->check);
+                ip_csum = csum_add(ip_csum,~old_ip_totlen);
+                ip_csum = csum_add(ip_csum,new_ip_totlen);
+                ip->check = ~csum_fold(ip_csum);
+            }
+            
+			
 
 			/*  Swap address    */
 			ip->saddr ^= ip->daddr;
 			ip->daddr ^= ip->saddr;
 			ip->saddr ^= ip->daddr;
 			
-			/*  Update ip's csum since we modify the ip.totlen  */
-			__u32 ip_csum = ~csum_unfold(ip->check);
-			ip_csum = csum_add(ip_csum,~old_ip_totlen);
-			ip_csum = csum_add(ip_csum,new_ip_totlen);
-			ip->check = ~csum_fold(ip_csum);
+			
 			
 
             /*  Put syncookie into seq# and swap rx_seq# +1 to ack#    */
@@ -289,20 +319,45 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 				haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
 			else if (hash_option == HSIPHASH)
 				hashcookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
-			
+
 			tcp->seq = hashcookie;
+            uint32_t rx_ack = tcp->ack_seq;
 			tcp->ack_seq = bpf_htonl(bpf_ntohl(rx_seq) + 1);
 			tcp->source ^= tcp->dest;
 			tcp->dest ^= tcp->source;
 			tcp->source ^= tcp->dest;
-
+            uint16_t old_win = tcp->window;
+            tcp->window = bpf_htons(502);
+            uint16_t rx_flag = *(uint16_t*)((void*)tcp + 12);
 			tcp->syn = 1;
 			tcp->ack = 1;
-
+            uint16_t new_flag = *(uint16_t*)((void*)tcp + 12);
             /*  Recompute the csum, might be optimize by pre-calculate the csum
                 of sa_opt   */
-			if(tcpcsum_option == CSUM_ON)
-				tcp->check = cksumTcp(ip,tcp);
+            
+			if(tcpcsum_option == CSUM_ON){
+                if(opt_ab_test){
+                    __u32 tcp_csum = ~csum_unfold(tcp->check);
+                    tcp_csum = csum_add(tcp_csum,~rx_tsval);
+                    tcp_csum = csum_add(tcp_csum,TS_START);
+                    tcp_csum = csum_add(tcp_csum,~rx_tsecr);
+                    tcp_csum = csum_add(tcp_csum,ts->tsecr);
+                    tcp_csum = csum_add(tcp_csum,~rx_seq);
+                    tcp_csum = csum_add(tcp_csum,hashcookie);
+                    tcp_csum = csum_add(tcp_csum,~rx_ack);
+                    tcp_csum = csum_add(tcp_csum,tcp->ack_seq);
+                    tcp_csum = csum_add(tcp_csum,~old_win);
+                    tcp_csum = csum_add(tcp_csum,tcp->window);
+                    tcp_csum = csum_add(tcp_csum,~rx_flag);
+                    tcp_csum = csum_add(tcp_csum,new_flag);
+                    tcp->check = ~csum_fold(tcp_csum);
+                }
+                else{
+                    tcp->check = cksumTcp(ip,tcp);
+                }
+            }
+
+            
 			if(opt_pressure == 1)
 				return -1;
 
@@ -334,6 +389,32 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 					DEBUG_PRINT("Switch agent: Fail syncookie check!\n");
 					return -1;
 				}
+                /*  TCP data length = 0  , conctate apache opt*/
+                //printf("%d\n",bpf_ntohs(ip->tot_len) - (ip->ihl*4) - (tcp->doff*4));
+                if(opt_ab_test && (!(bpf_ntohs(ip->tot_len) - (ip->ihl*4) - (tcp->doff*4)))){
+
+                    int delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_apache_opt)) - (tcp->doff*4);
+                    __u16 old_ip_totlen = ip->tot_len;
+                    __u16 new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
+                
+                    /*  ts.val = client's val , and ts.ecr = 0    */
+                    sa_apache_opts[worker_id].ts.tsval = ts->tsval;
+                    sa_apache_opts[worker_id].ts.tsecr = ts->tsecr;
+                    __builtin_memcpy(tcp_opt,&sa_apache_opts[worker_id],sizeof(struct common_apache_opt));
+
+                    /*  Update length information    */ 
+                    ip->tot_len = new_ip_totlen;
+                    tcp->doff += delta/4 ;
+                    (*len) += delta;
+
+                    /*  Update ip's csum since we modify the ip.totlen  */
+                    __u32 ip_csum = ~csum_unfold(ip->check);
+                    ip_csum = csum_add(ip_csum,~old_ip_totlen);
+                    ip_csum = csum_add(ip_csum,new_ip_totlen);
+                    ip->check = ~csum_fold(ip_csum);
+                    tcp->check = cksumTcp(ip,tcp);
+                   
+                }
 			}
 
 			/*  Other ack packet, validate map_cookie    */
@@ -404,6 +485,7 @@ static struct option long_options[] = {
 	{"hash-type", required_argument, 0, 'h'},
 	{"tcp-csum", required_argument, 0, 's'},
 	{"timestamp", required_argument, 0, 't'},
+	{"apache-bench",no_argument,0, 'c'},
 	{"change-key",no_argument,0, 'k'},
 	{"pressure", no_argument, 0, 'p'},
     {"forward", no_argument, 0, 'f'},
@@ -422,6 +504,7 @@ static void usage(const char *prog)
 		"  -h, --hash-type		'HARAKA', 'HSIPHASH', 'OFF' for hash function of the Hash cookie.\n"
 		"  -s, --tcp-csum 		'ON', 'OFF', Turn on/off recompute TCP csum.\n"
 		"  -t, --timestamp 		'ON', 'OFF', Turn on/off parsing timestamp.\n"
+		"  -c  --apache-bench   Use the tcp option of apache-bench (curl)\n"
 		"  -k  --change-key     Enable switch_agent to validate two cookies.\n"
 		"  -p, --pressure 		Receive a SYN packet and caculate syncookie then DROP!\n"
 		"  -f, --foward			Only foward packet in packet proccessor\n"
@@ -440,11 +523,12 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 	int option_index, c;
 
 	for (;;) {
-		c = getopt_long(argc, argv, "c:h:s:t:kpdqxaf", long_options, &option_index);
+		c = getopt_long(argc, argv, "h:s:t:ckpdqxaf", long_options, &option_index);
 		if (c == -1)
 			break;
 
 		switch (c) {
+        
 		case 'h':
 			if (!strcmp(optarg, "HARAKA")) {
 				hash_option = HARAKA;
@@ -478,6 +562,10 @@ static void parse_command_line(int argc, char **argv, char *app_path)
 				usage(basename(app_path));
 			}
 			break;
+
+        case 'c':
+			opt_ab_test = 1;
+			break;	
 		case 'k':
 			opt_change_key = 1;
 			break;		
@@ -559,6 +647,7 @@ int swich_agent (int argc, char **argv){
 	init_global_maps();
 	init_salt();
 	init_saopts();
+    init_sa_apache_opts();
 	init_MAC();
 	init_ip();
 
