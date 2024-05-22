@@ -180,6 +180,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
 
                 // Modify seq#
                 tcp->seq = bpf_htonl(bpf_ntohl(tcp->seq) + val.delta);
+                ts->tsval = 2;
                 bpf_map_update_elem(&conntrack_map_sc,&key,&val,BPF_EXIST);
             }
             

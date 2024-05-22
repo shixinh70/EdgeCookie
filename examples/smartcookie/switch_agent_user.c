@@ -11,13 +11,14 @@ static int opt_forward;
 static int opt_change_key;
 static int opt_tcpoption ;
 static int opt_add_connection ;
-
+static int opt_ab_test = 1;
 uint32_t drop_num;
 
 struct bpf_object *obj;
 struct xsknf_config config;
 struct pkt_5tuple flows[16];
 struct common_synack_opt sa_opts[16];
+static struct common_apache_opt sa_apache_opts[16];
 
 bloom_filter* bf_p;
 __u64 client_mac_64 ; 
@@ -34,6 +35,7 @@ const int c1 = 0x6e646f6d;
 const int c2 = 0x6e657261;
 const int c3 = 0x79746573;
 
+
 uint32_t client_ip;
 uint32_t server_ip;
 uint32_t attacker_ip;
@@ -49,6 +51,22 @@ static void init_saopts(){
 		sa_opts[i].ts.length = 10;
 	}
 }
+
+static void init_sa_apache_opts(){
+	for(int i=0; i< global_workers_num;i++){
+		sa_apache_opts[i].MSS = 0xb4050402; //1460
+		sa_apache_opts[i].SackOK = 0x0204;
+		sa_apache_opts[i].ts.tsval = 0;
+		sa_apache_opts[i].ts.tsecr = 0;
+		sa_apache_opts[i].ts.kind = 8;
+		sa_apache_opts[i].ts.length = 10;
+        sa_apache_opts[i].nop = 1;
+        sa_apache_opts[i].wscale[0] = 3;
+        sa_apache_opts[i].wscale[1] = 3;
+        sa_apache_opts[i].wscale[2] = 7;
+	}
+}
+
 static void init_ip(){
 	client_ip = inet_addr (CLIENT_IP);
 	server_ip = inet_addr (SERVER_IP);
@@ -224,64 +242,87 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
             int delta = 0;
 
             // Deal with option
-            if(opt_tcpoption && ts){
-                // Store rx pkt's tsval, then pur to ts.ecr
-                uint32_t rx_tsval = ts->tsval;
+            uint32_t rx_tsval = ts->tsval;
+            uint32_t rx_tsecr = ts->tsecr;
+            if(ts){
+                if(opt_tcpoption){
+                    if(!opt_ab_test){
+                        // Store rx pkt's tsval, then pur to ts.ecr
+                        // Remove old tcp option part and replace to common_syn_ack option.
+                        // Then adjust the packet length
+                        delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_synack_opt)) - (tcp->doff*4);
+                        old_ip_totlen = ip->tot_len;
+                        new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
 
-                // Remove old tcp option part and replace to common_syn_ack option.
-                // Then adjust the packet length
-                delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_synack_opt)) - (tcp->doff*4);
-                old_ip_totlen = ip->tot_len;
-                new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
+                        sa_opts[worker_id].ts.tsecr = rx_tsval;
+                        /*  ts.tsval should be switch_agent's clock, but access clock will 
+                            get very bad performance, so just give a contant*/
 
+                        sa_opts[worker_id].ts.tsval = 1; //htonl((uint32_t)clock());
+                        __builtin_memcpy(tcp_opt,&sa_opts[worker_id],sizeof(struct common_synack_opt));
 
-                sa_opts[worker_id].ts.tsecr = rx_tsval;
-                /*  ts.tsval should be switch_agent's clock, but access clock will 
-                    get very bad performance, so just give a contant*/
-
-                sa_opts[worker_id].ts.tsval = 1; //htonl((uint32_t)clock());
-                __builtin_memcpy(tcp_opt,&sa_opts[worker_id],sizeof(struct common_synack_opt));
-
-                // Update length information 
+                        // Update length information 
+                    }
+                    else{
+                        ts->tsval = 1;
+                        ts->tsecr = rx_tsval;
+                    }
+                }
+                else{
+                    delta = (int)(sizeof(struct tcphdr)) - (tcp->doff*4);
+                    old_ip_totlen = ip->tot_len;
+                    new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
+                }
+                if(!opt_ab_test){
+                    ip->tot_len = new_ip_totlen;
+                    tcp->doff += delta/4 ;
+                    (*len) += delta;
+                    // since we modify ip.totalen. We need to update ip_csum
+                    __u32 ip_csum = ~csum_unfold(ip->check);
+                    ip_csum = csum_add(ip_csum,~old_ip_totlen);
+                    ip_csum = csum_add(ip_csum,new_ip_totlen);
+                    ip->check = ~csum_fold(ip_csum);
+                }
             }
-
-            // turn off all option
-            else{
-                delta = (int)(sizeof(struct tcphdr)) - (tcp->doff*4);
-                old_ip_totlen = ip->tot_len;
-                new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
-            }
-
-            ip->tot_len = new_ip_totlen;
-            tcp->doff += delta/4 ;
-            (*len) += delta;
 
             // Modify iphdr
             ip->saddr ^= ip->daddr;
             ip->daddr ^= ip->saddr;
             ip->saddr ^= ip->daddr;
-
-            // since we modify ip.totalen. We need to update ip_csum
-            __u32 ip_csum = ~csum_unfold(ip->check);
-            ip_csum = csum_add(ip_csum,~old_ip_totlen);
-            ip_csum = csum_add(ip_csum,new_ip_totlen);
-            ip->check = ~csum_fold(ip_csum);
-            
-            
             __u32 rx_seq = tcp->seq;
-
             uint32_t hashcookie = hsiphash(ip->daddr,ip->saddr,tcp->source,tcp->dest);
-
             tcp->seq = hashcookie;
+            uint32_t rx_ack = tcp->ack_seq;
             tcp->ack_seq = bpf_htonl(bpf_ntohl(rx_seq) + 1);
             tcp->source ^= tcp->dest;
             tcp->dest ^= tcp->source;
             tcp->source ^= tcp->dest;
             
-            tcp->syn = 1;
-            tcp->ack = 1;
-           
-            tcp->check = cksumTcp(ip,tcp);
+            uint16_t rx_flag = *(uint16_t*)((void*)tcp + 12);
+			tcp->syn = 1;
+			tcp->ack = 1;
+            uint16_t new_flag = *(uint16_t*)((void*)tcp + 12);
+
+            if(!opt_ab_test)
+                tcp->check = cksumTcp(ip,tcp);
+            else{
+                uint16_t old_win = tcp->window;
+                tcp->window = bpf_htons(502);
+                __u32 tcp_csum = ~csum_unfold(tcp->check);
+                tcp_csum = csum_add(tcp_csum,~rx_tsval);
+                tcp_csum = csum_add(tcp_csum,ts->tsval);
+                tcp_csum = csum_add(tcp_csum,~rx_tsecr);
+                tcp_csum = csum_add(tcp_csum,ts->tsecr);
+                tcp_csum = csum_add(tcp_csum,~rx_seq);
+                tcp_csum = csum_add(tcp_csum,tcp->seq);
+                tcp_csum = csum_add(tcp_csum,~rx_ack);
+                tcp_csum = csum_add(tcp_csum,tcp->ack_seq);
+                tcp_csum = csum_add(tcp_csum,~old_win);
+                tcp_csum = csum_add(tcp_csum,tcp->window);
+                tcp_csum = csum_add(tcp_csum,~rx_flag);
+                tcp_csum = csum_add(tcp_csum,new_flag);
+                tcp->check = ~csum_fold(tcp_csum);
+            }
             if(opt_pressure == 1)
                 return -1;
 
@@ -291,12 +332,9 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
         // if ack, check bf, if no, check syncookie, if pass tag, else drop.
 		else if(tcp->ack && !(tcp->syn)){
             
-            // If in bloomfilter
+           
             in_bf = bloom_filter_test(bf_p, &flows[worker_id],12);
-            if (in_bf)
-                return forward(eth,ip);
-            
-            else{   
+            if (!in_bf){
                 // validate syncookie
                 uint32_t syncookie = 0;
                 syncookie = hsiphash(ip->saddr,ip->daddr,tcp->source,tcp->dest);
@@ -307,9 +345,33 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
                 tcp->ece = 1; //tag the packet
 
                 // This should be add after receive clone ack packet, but have some bugs.
-                bloom_filter_put(bf_p,&flows[worker_id],12);
-                return forward(eth,ip);   
+                bloom_filter_put(bf_p,&flows[worker_id],12); 
             }
+            if(opt_ab_test && (ts->tsecr == 1)&& (!tcp->psh)){
+
+                int delta = (int)(sizeof(struct tcphdr) + sizeof(struct common_apache_opt)) - (tcp->doff*4);
+                __u16 old_ip_totlen = ip->tot_len;
+                __u16 new_ip_totlen = bpf_htons(bpf_ntohs(ip->tot_len) + delta);
+            
+                /*  ts.val = client's val , and ts.ecr = 0    */
+                sa_apache_opts[worker_id].ts.tsval = ts->tsval;
+                sa_apache_opts[worker_id].ts.tsecr = ts->tsecr;
+                __builtin_memcpy(tcp_opt,&sa_apache_opts[worker_id],sizeof(struct common_apache_opt));
+
+                /*  Update length information    */ 
+                ip->tot_len = new_ip_totlen;
+                tcp->doff += delta/4 ;
+                (*len) += delta;
+
+                /*  Update ip's csum since we modify the ip.totlen  */
+                __u32 ip_csum = ~csum_unfold(ip->check);
+                ip_csum = csum_add(ip_csum,~old_ip_totlen);
+                ip_csum = csum_add(ip_csum,new_ip_totlen);
+                ip->check = ~csum_fold(ip_csum);
+                tcp->check = cksumTcp(ip,tcp);
+                //printf("high exec\n");
+            }
+            return forward(eth,ip);
 		}
 	}
 
@@ -328,14 +390,14 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
         }
         else if (tcp->ack){
             if(ts){
-                uint32_t old_ts_val = ts->tsval;
+                //uint32_t old_ts_val = ts->tsval;
                 /*  ts.tsval should be switch_agent's clock, but access clock will 
                     get very bad performance, so just give a contant*/
-                ts->tsval =1; //htonl((uint32_t)clock());
-                __u32 tcp_csum = ~csum_unfold(tcp->check);
-                tcp_csum = csum_add(tcp_csum,~old_ts_val);
-                tcp_csum = csum_add(tcp_csum,ts->tsval);
-                tcp->check = ~csum_fold(tcp_csum);
+                //ts->tsval =1; //htonl((uint32_t)clock());
+                // __u32 tcp_csum = ~csum_unfold(tcp->check);
+                // tcp_csum = csum_add(tcp_csum,~old_ts_val);
+                // tcp_csum = csum_add(tcp_csum,ts->tsval);
+                // tcp->check = ~csum_fold(tcp_csum);
             }
         }
 	}
@@ -465,7 +527,9 @@ int swich_agent (int argc, char **argv){
 	setlocale(LC_ALL, "");
 
     bf_p = bloom_filter_new(3*1024*1024, 3, djb2,sdbm,mm2);
+    
 	init_saopts();
+    init_sa_apache_opts();
 	init_MAC();
 	init_ip();
 	xsknf_start_workers();

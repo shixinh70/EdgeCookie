@@ -4,12 +4,12 @@
 /*  Manully set the address information 
     ***_R_F mean the argument order of
     ./swith_agent -i <order0> -i <order1>   */
-#define CLIENT_MAC "3c:fd:fe:b3:15:c8"
-#define SERVER_MAC "3c:fd:fe:b4:fe:8c"
-#define ATTACKER_MAC "3c:fd:fe:b3:13:44"
-#define CLIENT_R_MAC "90:e2:ba:b3:75:a0"
-#define SERVER_R_MAC "90:e2:ba:b3:75:c1"
-#define ATTACKER_R_MAC "90:e2:ba:b3:75:a0"
+#define CLIENT_MAC "3c:fd:fe:b7:aa:41"
+#define SERVER_MAC "3c:fd:fe:ac:fb:1d"
+#define ATTACKER_MAC "3c:fd:fe:b4:fa:41"
+#define CLIENT_R_MAC "90:e2:ba:b5:03:11"
+#define SERVER_R_MAC "90:e2:ba:b5:03:10"
+#define ATTACKER_R_MAC "90:e2:ba:b5:03:11"
 #define CLIENT_IP ("10.18.0.3")
 #define SERVER_IP ("10.19.0.3")
 #define ATTACKER_IP ("10.18.0.4")

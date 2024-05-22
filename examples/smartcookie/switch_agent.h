@@ -61,6 +61,15 @@ struct global_data {
 	int workers_num;
 };
 
+struct common_apache_opt
+{
+	uint32_t MSS;
+	uint16_t SackOK;
+	struct tcp_opt_ts ts;
+    uint8_t nop;
+    uint8_t wscale[3];  
+} __attribute__((packed));
+
 struct pkt_5tuple {
   uint32_t src_ip;
   uint32_t dst_ip;
