@@ -85,7 +85,7 @@ clean:
 	$(RM) $(EXAMPLES_KERN)
 	$(RM) $(EXAMPLES_COMMON)
 	
-	$(RM) ./examples/switch_agent/test
+	$(RM) ./examples/htscookie/test
 
 llvm-check: $(CLANG) $(LLC)
 	@for TOOL in $^ ; do \
