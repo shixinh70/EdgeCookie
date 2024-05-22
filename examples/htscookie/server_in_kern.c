@@ -3,6 +3,8 @@
 #define DROPTEST 0
 #define DROP_THRESH 100000
 
+
+
 uint8_t init = 0;
 static __u16 map_cookies[65536];
 static __u32 map_seeds[65536];
@@ -225,6 +227,9 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                         __u64 tcp_csum = tcp->check;
                         __u32 old_tcp_tsecr = ts->tsecr;
                         __u32* flag_ptr ; 
+                        __u32 old_win = tcp->window;
+                        __u32 new_win = bpf_htons(64240);
+                        tcp->window = bpf_htons(64240);
 
                         flag_ptr = ((void*)tcp) + 12;
                         if((void*)flag_ptr + 4 > data_end) return XDP_DROP;
@@ -240,6 +245,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                         /*  Compute TCP csum    */
                         tcp_csum = bpf_csum_diff(&tcp_old_flag, 4, &tcp_new_flag, 4, ~tcp_csum);
                         tcp_csum = bpf_csum_diff(&old_tcp_seq, 4, &tcp->seq, 4, tcp_csum);
+                        tcp_csum = bpf_csum_diff(&old_win, 4, &new_win, 4, tcp_csum);
                         tcp_csum = bpf_csum_diff(&old_tcp_ack, 4, 0, 0, tcp_csum);
                         tcp_csum = bpf_csum_diff(&old_tcp_tsecr, 4, 0, 0, tcp_csum);
                         tcp->check = csum_fold_helper_64(tcp_csum);

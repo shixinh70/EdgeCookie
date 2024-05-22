@@ -277,7 +277,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
             tcp->source ^= tcp->dest;
             tcp->dest ^= tcp->source;
             tcp->source ^= tcp->dest;
-
+            
             tcp->syn = 1;
             tcp->ack = 1;
            

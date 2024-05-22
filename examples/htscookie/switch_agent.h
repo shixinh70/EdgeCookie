@@ -48,6 +48,15 @@ struct common_synack_opt
 	struct tcp_opt_ts ts;
 } __attribute__((packed));
 
+struct common_apache_opt
+{
+	uint32_t MSS;
+	uint16_t SackOK;
+	struct tcp_opt_ts ts;
+    uint8_t nop;
+    uint8_t wscale[3];  
+} __attribute__((packed));
+
 struct eth_mac_t
 {
     uint8_t buf[6];
