@@ -73,7 +73,7 @@ static void init_salt(){
 }
 static void init_saopts(){
 	for(int i=0; i< global_workers_num;i++){
-		sa_opts[i].MSS = 0x18020402; // 536
+		sa_opts[i].MSS = MSS_536; // 536
 		sa_opts[i].SackOK = 0x0204;
 		sa_opts[i].ts.tsval = TS_START;
 		sa_opts[i].ts.kind = 8;
@@ -84,7 +84,7 @@ static void init_saopts(){
 
 static void init_sa_apache_opts(){
 	for(int i=0; i< global_workers_num;i++){
-		sa_apache_opts[i].MSS = 0xb4050402; //1460
+		sa_apache_opts[i].MSS = MSS_1460; //1460
 		sa_apache_opts[i].SackOK = 0x0204;
 		sa_apache_opts[i].ts.tsval = 0;
 		sa_apache_opts[i].ts.tsecr = 0;
