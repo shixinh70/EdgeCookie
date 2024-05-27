@@ -31,7 +31,10 @@
 #define TS_START bpf_ntohl(0x01010000)
 #define MAX_TCP_OPTION 10
 #define MAX_CONNECTION 1000000
-
+#define SYN_SENT 0
+#define ACK_SENT 1
+#define ONGOING 2
+#define FIN 3
 
 // SYN
 // MSS, SackOk, Timestamp
@@ -70,6 +73,7 @@ struct map_key_t {
 struct map_val_t {
         __u32 ts_val_s;
         __u32 delta;
+        __u32 state;
 };
 
 

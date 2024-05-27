@@ -145,30 +145,64 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
 
                 /*  If the flow has already exist, just
                     do the tcp handover, must be benign traffic. */
-                if(val_p && (!tcp->ece)){
+                if(val_p && (!tcp->ece) && val.state != FIN){
+
                     if(bpf_probe_read_kernel(&val,sizeof(val),val_p) != 0){
                             DEBUG_PRINT ("SERVER_IN: Read map_val fail!\n");
                             return XDP_DROP;
                         }
-                    __u32 rx_ack_seq = tcp->ack_seq;
-                    __u64 tcp_csum = tcp->check;
-                    __u32 new_ack_seq;
-                    __u32* flag_ptr ; 
-                    flag_ptr = ((void*)tcp) + 12;
-                    if((void*)flag_ptr + 4 > data_end) return XDP_DROP;
-                    
-                    
-                    new_ack_seq = bpf_htonl(bpf_ntohl(tcp->ack_seq) - val.delta);
-                    tcp->ack_seq = new_ack_seq; // Ack delta
-                    tcp_csum = bpf_csum_diff(&rx_ack_seq, 4, &new_ack_seq, 4, ~tcp_csum);
-                    tcp->ece = 0 ;
-                    if(ts){
-                        __u32 rx_tsecr = ts->tsecr;
-                        __u32 new_tsecr = val.ts_val_s;
-                        ts->tsecr = new_tsecr; // convert ecr to server's ts_val
-                        tcp_csum = bpf_csum_diff(&rx_tsecr, 4, &new_tsecr, 4, tcp_csum);
+                    if(val.state == ONGOING || val.state == ACK_SENT){
+                        val.state == ONGOING;
+                        __u32 rx_ack_seq = tcp->ack_seq;
+                        __u64 tcp_csum = tcp->check;
+                        __u32 new_ack_seq;
+                        __u32* flag_ptr ; 
+                        flag_ptr = ((void*)tcp) + 12;
+                        if((void*)flag_ptr + 4 > data_end) return XDP_DROP;
+                        
+                        
+                        new_ack_seq = bpf_htonl(bpf_ntohl(tcp->ack_seq) - val.delta);
+                        tcp->ack_seq = new_ack_seq; // Ack delta
+                        tcp_csum = bpf_csum_diff(&rx_ack_seq, 4, &new_ack_seq, 4, ~tcp_csum);
+                        tcp->ece = 0 ;
+                        if(ts){
+                            __u32 rx_tsecr = ts->tsecr;
+                            __u32 new_tsecr = val.ts_val_s;
+                            ts->tsecr = new_tsecr; // convert ecr to server's ts_val
+                            tcp_csum = bpf_csum_diff(&rx_tsecr, 4, &new_tsecr, 4, tcp_csum);
+                        }
+                        tcp->check = csum_fold_helper_64(tcp_csum);
                     }
-                    tcp->check = csum_fold_helper_64(tcp_csum);
+                    else if(val.state == SYN_SENT){
+                        ip->saddr ^= ip->daddr;
+                        ip->daddr ^= ip->saddr;
+                        ip->saddr ^= ip->daddr;
+
+                        tcp->source ^= tcp->dest;
+                        tcp->dest ^= tcp->source;
+                        tcp->source ^= tcp->dest;
+
+                        tcp->ack ^= tcp->ack_seq;
+                        tcp->ack_seq ^= tcp->ack;
+                        tcp->ack ^= tcp->ack_seq;
+
+                        struct eth_mac_t mac_tmp;
+                        __builtin_memcpy(&mac_tmp, eth->h_source, 6);
+                        __builtin_memcpy(eth->h_source, eth->h_dest, 6);
+                        __builtin_memcpy(eth->h_dest, &mac_tmp, 6);
+
+                        __u32* flag_ptr ; 
+                        flag_ptr = ((void*)tcp) + 12;
+                   
+                        if((void*)flag_ptr + 4 > data_end) return XDP_DROP;
+                        __u32 tcp_old_flag = *flag_ptr;
+                        tcp->psh = 0;
+                        __u32 tcp_new_flag = *flag_ptr;
+                        __u64 tcp_csum = tcp->check;
+                        tcp_csum = bpf_csum_diff(&tcp_old_flag, 4, &tcp_new_flag, 4, ~tcp_csum);
+                        tcp->check = csum_fold_helper_64(tcp_csum);
+                        return XDP_TX;
+                    }
                 }
                 
                 /*  If no connection exist or has ece tag */
@@ -208,6 +242,7 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
 
                     /* Create connection and remove the ECE tag */
                     val.delta = bpf_ntohl(tcp->ack_seq);
+                    val.state = SYN_SENT;
                     bpf_map_update_elem(&conntrack_map_sc, &key, &val, BPF_ANY);
 
                     __u32 old_tcp_seq = tcp->seq;

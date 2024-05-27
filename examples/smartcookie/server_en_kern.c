@@ -93,6 +93,7 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
             if(tcp->ack && tcp->syn){
                                 
                 val.delta = val.delta - bpf_ntohl(tcp->seq) - 1;
+                val.state = ACK_SENT;
                 if(ts){
                     val.ts_val_s = ts->tsval;
                     tcp->window = bpf_htons(0x1F6); // 502
