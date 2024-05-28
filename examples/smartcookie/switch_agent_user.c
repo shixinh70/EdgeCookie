@@ -44,7 +44,7 @@ extern int global_workers_num;
 
 static void init_saopts(){
 	for(int i=0; i< global_workers_num;i++){
-		sa_opts[i].MSS = 0x18020402;
+		sa_opts[i].MSS = MSS_536;
 		sa_opts[i].SackOK = 0x0204;
 		sa_opts[i].ts.tsval = 1;
 		sa_opts[i].ts.kind = 8;
@@ -54,7 +54,7 @@ static void init_saopts(){
 
 static void init_sa_apache_opts(){
 	for(int i=0; i< global_workers_num;i++){
-		sa_apache_opts[i].MSS = 0xb4050402; //1460
+		sa_apache_opts[i].MSS = MSS_1460; 
 		sa_apache_opts[i].SackOK = 0x0204;
 		sa_apache_opts[i].ts.tsval = 0;
 		sa_apache_opts[i].ts.tsecr = 0;
@@ -369,7 +369,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
                 ip_csum = csum_add(ip_csum,new_ip_totlen);
                 ip->check = ~csum_fold(ip_csum);
                 tcp->check = cksumTcp(ip,tcp);
-                //printf("high exec\n");
+                
             }
             return forward(eth,ip);
 		}
@@ -390,14 +390,14 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
         }
         else if (tcp->ack){
             if(ts){
-                //uint32_t old_ts_val = ts->tsval;
+                uint32_t old_ts_val = ts->tsval;
                 /*  ts.tsval should be switch_agent's clock, but access clock will 
                     get very bad performance, so just give a contant*/
-                //ts->tsval =1; //htonl((uint32_t)clock());
-                // __u32 tcp_csum = ~csum_unfold(tcp->check);
-                // tcp_csum = csum_add(tcp_csum,~old_ts_val);
-                // tcp_csum = csum_add(tcp_csum,ts->tsval);
-                // tcp->check = ~csum_fold(tcp_csum);
+                ts->tsval =2; //htonl((uint32_t)clock());
+                __u32 tcp_csum = ~csum_unfold(tcp->check);
+                tcp_csum = csum_add(tcp_csum,~old_ts_val);
+                tcp_csum = csum_add(tcp_csum,ts->tsval);
+                tcp->check = ~csum_fold(tcp_csum);
             }
         }
 	}
