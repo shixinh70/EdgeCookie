@@ -307,39 +307,41 @@ void hsiphash_perf_time(unsigned char* out, const unsigned char* in, int outlen,
 }
 
 void graph(){
+    srand(0x1234);
+    uint32_t ms16bit = (rand()&0xffff0000);
     
     for(uint32_t i=0;i<65535;i++){
-        uint32_t k = i | 0xaca20000;
-        uint32_t h = sdbm_perf(&k,4,2);
+        uint32_t k = i | ms16bit;
+        uint32_t h = crc_perf(&k,4,2);
         h = (h >> 16);
         printf("%d ",h);
     }
 }
 
 int main(){
-	load_constants();
-    hash_distribution("djb2",djb2_perf);
-    hash_distribution("djb2a",djb2a_perf);
-    hash_distribution("sdbm",sdbm_perf);
-    hash_distribution("sdbma",sdbma_perf);
-    hash_distribution("fnvla",fnv1a_perf);
-    hash_distribution("fnvl",fnv1_perf);
-    hash_distribution("murmur3",murmurhash3);
-    hash_distribution("murmur2",MurmurHash2);
-    hash_distribution("crc32",crc_perf);
+	// load_constants();
+    // hash_distribution("djb2",djb2_perf);
+    // hash_distribution("djb2a",djb2a_perf);
+    // hash_distribution("sdbm",sdbm_perf);
+    // hash_distribution("sdbma",sdbma_perf);
+    // hash_distribution("fnvla",fnv1a_perf);
+    // hash_distribution("fnvl",fnv1_perf);
+    // hash_distribution("murmur3",murmurhash3);
+    // hash_distribution("murmur2",MurmurHash2);
+    // hash_distribution("crc32",crc_perf);
     
-    timeit ("haraka256",haraka256,32,32);
+    // timeit ("haraka256",haraka256,32,32);
 
-    timeit ("crc32",crc_perf_time,4,4);
-    timeit ("murmur2",mm2_perf_time,4,4);
-    timeit ("murmur3",mm3_perf_time,4,4);
-    timeit ("djb2",djb2_perf_time,4,4);
-    timeit ("djb2a",djb2a_perf_time,4,4);
-    timeit ("sdbm",sdbm_perf_time,4,4);
-    timeit ("sdbma",sdbma_perf_time,4,4);
-    timeit ("fnv1",fnv1_perf_time,4,4);
-    timeit ("fnv1a",fnv1a_perf_time,4,4);
-    timeit ("hsiphash",hsiphash_perf_time,12,4);
-    //graph();
+    // timeit ("crc32",crc_perf_time,4,4);
+    // timeit ("murmur2",mm2_perf_time,4,4);
+    // timeit ("murmur3",mm3_perf_time,4,4);
+    // timeit ("djb2",djb2_perf_time,4,4);
+    // timeit ("djb2a",djb2a_perf_time,4,4);
+    // timeit ("sdbm",sdbm_perf_time,4,4);
+    // timeit ("sdbma",sdbma_perf_time,4,4);
+    // timeit ("fnv1",fnv1_perf_time,4,4);
+    // timeit ("fnv1a",fnv1a_perf_time,4,4);
+    // timeit ("hsiphash",hsiphash_perf_time,12,4);
+    graph();
 
 }
