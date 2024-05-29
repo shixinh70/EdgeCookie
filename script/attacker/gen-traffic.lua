@@ -128,6 +128,11 @@ function loadSlave(txQueue, size, flows, seed, ack_flood, incr_ts)
             pkt.tcp:setNopOption(0)
             pkt.tcp:setNopOption(1)
             pkt.tcp:setTSOption(2,1234,(tscounter))
+
+            -- 10.18.0.4's original mapcookie will be 33521
+            -- pkt.tcp:setTSOption(2,1234,33521)
+            
+
             tscounter = tscounter + 1
             tscounter = tscounter % 0xffffffff
         
