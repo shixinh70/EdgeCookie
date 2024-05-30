@@ -193,14 +193,14 @@ static __always_inline int forward(struct ethhdr* eth, struct iphdr* ip){
 		return SERVER_R_IF_ORDER;
 	}
 	// TO attacker
-	else if (ip->daddr == attacker_ip){
+	else /*if (ip->daddr == attacker_ip)*/{
 		__builtin_memcpy(eth->h_source, &attacker_r_mac_64,6);
 		__builtin_memcpy(eth->h_dest, &attacker_mac_64,6);
 		
 
 		return ATTACKER_R_IF_ORDER;
 	}
-	else return -1;
+	
 }
 static __always_inline __u16 get_map_cookie(__u32 ipaddr){
 
@@ -421,14 +421,14 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			else{
 				uint32_t hybrid_cookie = ntohl(ts->tsecr);
 				if(((hybrid_cookie & 0xffff) == get_map_cookie_fnv(ip->saddr))){
-					// DEBUG_PRINT("Switch agent: Pass map_cookie, map cookie = %u, cal_map_cookie = %u\n"
+					// printf("Switch agent: Pass map_cookie, map cookie = %u, cal_map_cookie = %u\n"
 					// 															,hybrid_cookie & 0xffff
 					// 															,get_map_cookie_fnv(ip->saddr) );
 				}
 				else{
-					DEBUG_PRINT("Switch agent: Fail map_cookie, map cookie = %u, cal_map_cookie = %u\n"
-																				,hybrid_cookie & 0xffff
-																				,get_map_cookie_fnv(ip->saddr) );
+					// printf("Switch agent: Fail map_cookie, map cookie = %u, cal_map_cookie = %u\n"
+					// 															,hybrid_cookie & 0xffff
+					// 															,get_map_cookie_fnv(ip->saddr) );
 
                     /*  If during change key process, check hash_cookie */
 					if(change_key_duration | opt_change_key){

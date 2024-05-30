@@ -1,7 +1,7 @@
 #include "server.h"
 
 #define DROPTEST 0
-#define DROP_THRESH 100000
+#define DROP_THRESH 5000000
 
 
 
