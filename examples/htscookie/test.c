@@ -12,6 +12,15 @@
 #define NUM_TIMINGS 10000
 #define ITERATIONS 10000
 
+enum modes {
+    MSB16,
+    LSB16,
+    XOR,
+    MODES_END
+};
+
+enum modes mode;
+
 #define SIPROUND          \
 	do                    \
 	{                     \
@@ -164,28 +173,43 @@ void hash_distribution(char* name,hash_function func){
     uint64_t cnt2 = 0;
     srand(time(NULL));
     uint32_t seeds[ROUND] = {0};
-    uint16_t ms16b[ROUND] = {0}; 
+    uint32_t ms16b[ROUND] = {0};
+    char text[][10] = {"MSB16","LSB16","XOR"};
+
     for(uint32_t i =0;i<ROUND;i++){
         seeds[i] = rand();
-        ms16b[i] = rand() & 0xffff;
+        ms16b[i] = rand() & 0xffff0000;
     }
-    
-    for(uint32_t i=0;i<ROUND;i++){
-        for(uint32_t j= 0;j<65536;j++){
-            uint32_t k = (j | (((uint32_t)ms16b[i])<<16));
-            uint32_t h = func((uint8_t*)&k,4,seeds[i]);
-            h = (h & 0xffff);
-            if(array[h] == 0){
-                cnt++;
+    for(int m = MSB16; m<MODES_END; m++){
+        for(uint32_t i=0;i<ROUND;i++){
+            for(uint32_t j= 0;j<65536;j++){
+                uint32_t k = ms16b[i]+j;
+                uint32_t h = func((uint8_t*)&k,4,seeds[i]);
+                if(m==XOR)
+                    h = ((h>>16)^(h&0xffff)); // xor msb16 and lsb16
+                else if(m==LSB16)    
+                    h = (h&0xffff); // take lsb16
+                else if(m==MSB16)
+                    h = (h>>16); // take msb16
+                else{
+                    printf("Error: No define MSB16, LSB16, XOR\n");
+                    exit(1);
+                }
+                if(array[h] == 0){
+                    cnt++;
+                }
+                else{
+                    cnt2++;
+                }
+                array[h] ++;
             }
-            else{
-                cnt2++;
-            }
-            array[h] ++;
+            memset(array,0,sizeof(array));
         }
-        memset(array,0,sizeof(array));
+        printf("%s-%-10sdistribution: not col=%-10lu col=%-10lu, col_rate=%-10lf\n",\
+                name, text[m], cnt, cnt2, (double)cnt2/(cnt+cnt2));
+        cnt = 0; cnt2 =0;
     }
-    printf("%s distribution: not col= %lu col=%lu, col_rate = %lf\n",name ,cnt,cnt2,(double)cnt2/(cnt+cnt2));
+        
 }
 
 static __always_inline uint32_t djb2_perf ( const void * key, int len, uint32_t seed ){
@@ -310,25 +334,25 @@ void graph(){
     srand(0x1234);
     uint32_t ms16bit = (rand()&0xffff0000);
     
-    for(uint32_t i=0;i<65535;i++){
+    for(uint32_t i=0;i<65536;i++){
         uint32_t k = i | ms16bit;
         uint32_t h = crc_perf(&k,4,2);
-        h = (h >> 16);
+        h = (h>>16);
         printf("%d ",h);
     }
 }
 
 int main(){
-	// load_constants();
-    // hash_distribution("djb2",djb2_perf);
-    // hash_distribution("djb2a",djb2a_perf);
-    // hash_distribution("sdbm",sdbm_perf);
-    // hash_distribution("sdbma",sdbma_perf);
-    // hash_distribution("fnvla",fnv1a_perf);
-    // hash_distribution("fnvl",fnv1_perf);
-    // hash_distribution("murmur3",murmurhash3);
-    // hash_distribution("murmur2",MurmurHash2);
-    // hash_distribution("crc32",crc_perf);
+	load_constants();
+    hash_distribution("djb2",djb2_perf);
+    hash_distribution("djb2a",djb2a_perf);
+    hash_distribution("sdbm",sdbm_perf);
+    hash_distribution("sdbma",sdbma_perf);
+    hash_distribution("fnvla",fnv1a_perf);
+    hash_distribution("fnvl",fnv1_perf);
+    hash_distribution("murmur3",murmurhash3);
+    hash_distribution("murmur2",MurmurHash2);
+    hash_distribution("crc32",crc_perf);
     
     // timeit ("haraka256",haraka256,32,32);
 
@@ -342,6 +366,6 @@ int main(){
     // timeit ("fnv1",fnv1_perf_time,4,4);
     // timeit ("fnv1a",fnv1a_perf_time,4,4);
     // timeit ("hsiphash",hsiphash_perf_time,12,4);
-    graph();
+    //graph();
 
 }
