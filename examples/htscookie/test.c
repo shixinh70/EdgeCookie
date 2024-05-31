@@ -18,8 +18,93 @@ enum modes {
     XOR,
     MODES_END
 };
-
 enum modes mode;
+
+#include <stdint.h>
+
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+	__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#  define _le64toh(x) ((uint64_t)(x))
+#elif defined(_WIN32)
+/* Windows is always little endian, unless you're on xbox360
+   http://msdn.microsoft.com/en-us/library/b0084kay(v=vs.80).aspx */
+#  define _le64toh(x) ((uint64_t)(x))
+#elif defined(__APPLE__)
+#  include <libkern/OSByteOrder.h>
+#  define _le64toh(x) OSSwapLittleToHostInt64(x)
+#else
+
+/* See: http://sourceforge.net/p/predef/wiki/Endianness/ */
+#  if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#    include <sys/endian.h>
+#  else
+#    include <endian.h>
+#  endif
+#  if defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && \
+	__BYTE_ORDER == __LITTLE_ENDIAN
+#    define _le64toh(x) ((uint64_t)(x))
+#  else
+#    define _le64toh(x) le64toh(x)
+#  endif
+
+#endif
+
+
+#define ROTATE(x, b) (uint64_t)( ((x) << (b)) | ( (x) >> (64 - (b))) )
+
+#define HALF_ROUND(a,b,c,d,s,t)			\
+	a += b; c += d;				\
+	b = ROTATE(b, s) ^ a;			\
+	d = ROTATE(d, t) ^ c;			\
+	a = ROTATE(a, 32);
+
+#define DOUBLE_ROUND(v0,v1,v2,v3)		\
+	HALF_ROUND(v0,v1,v2,v3,13,16);		\
+	HALF_ROUND(v2,v1,v0,v3,17,21);		\
+	HALF_ROUND(v0,v1,v2,v3,13,16);		\
+	HALF_ROUND(v2,v1,v0,v3,17,21);
+
+
+uint64_t siphash24(const void *src, unsigned long src_sz, uint32_t key) {
+	
+	uint64_t k0 = 0x77859091aff27184ULL;
+	uint64_t k1 = 0x8192471092ffca12ULL;
+	uint64_t b = (uint64_t)src_sz << 56;
+	const uint64_t *in = (uint64_t*)src;
+
+	uint64_t v0 = k0 ^ 0x736f6d6570736575ULL;
+	uint64_t v1 = k1 ^ 0x646f72616e646f6dULL;
+	uint64_t v2 = k0 ^ 0x6c7967656e657261ULL;
+	uint64_t v3 = k1 ^ 0x7465646279746573ULL;
+
+	while (src_sz >= 8) {
+		uint64_t mi = _le64toh(*in);
+		in += 1; src_sz -= 8;
+		v3 ^= mi;
+		DOUBLE_ROUND(v0,v1,v2,v3);
+		v0 ^= mi;
+	}
+
+	uint64_t t = 0; uint8_t *pt = (uint8_t *)&t; uint8_t *m = (uint8_t *)in;
+	switch (src_sz) {
+	case 7: pt[6] = m[6];
+	case 6: pt[5] = m[5];
+	case 5: pt[4] = m[4];
+	case 4: *((uint32_t*)&pt[0]) = *((uint32_t*)&m[0]); break;
+	case 3: pt[2] = m[2];
+	case 2: pt[1] = m[1];
+	case 1: pt[0] = m[0];
+	}
+	b |= _le64toh(t);
+
+	v3 ^= b;
+	DOUBLE_ROUND(v0,v1,v2,v3);
+	v0 ^= b; v2 ^= 0xff;
+	DOUBLE_ROUND(v0,v1,v2,v3);
+	DOUBLE_ROUND(v0,v1,v2,v3);
+	return (v0 ^ v1) ^ (v2 ^ v3);
+}
+
 
 #define SIPROUND          \
 	do                    \
@@ -239,7 +324,9 @@ static __always_inline uint32_t fnv1a_perf ( const void * key, int len, uint32_t
 static __always_inline uint32_t crc_perf ( const void * key, int len, uint32_t seed ){
     return xcrc32(key,len,seed);
 }
-
+static __always_inline uint32_t siphash24_perf ( const void * key, int len, uint32_t seed ){
+    return siphash24(key,len,seed);
+}
 
 void crc_perf_time ( unsigned char* out, const unsigned char* in, int outlen, int inlen ){
     (*(uint32_t*)out) = xcrc32((uint8_t*)&in,inlen,0xffff);
@@ -329,7 +416,9 @@ void hsiphash_perf_time(unsigned char* out, const unsigned char* in, int outlen,
 	*((uint32_t*)out) = hash;
     //__builtin_memcpy(out,&hash,4);
 }
-
+void siphash24_perf_time(unsigned char* out, const unsigned char* in, int outlen, int inlen){
+    *((uint32_t*)out) = siphash24_perf(in, inlen, 0);
+}
 void graph(){
     srand(0x1234);
     uint32_t ms16bit = (rand()&0xffff0000);
@@ -344,28 +433,29 @@ void graph(){
 
 int main(){
 	load_constants();
-    hash_distribution("djb2",djb2_perf);
-    hash_distribution("djb2a",djb2a_perf);
-    hash_distribution("sdbm",sdbm_perf);
-    hash_distribution("sdbma",sdbma_perf);
-    hash_distribution("fnvla",fnv1a_perf);
-    hash_distribution("fnvl",fnv1_perf);
-    hash_distribution("murmur3",murmurhash3);
-    hash_distribution("murmur2",MurmurHash2);
-    hash_distribution("crc32",crc_perf);
+    // hash_distribution("djb2",djb2_perf);
+    // hash_distribution("djb2a",djb2a_perf);
+    // hash_distribution("sdbm",sdbm_perf);
+    // hash_distribution("sdbma",sdbma_perf);
+    // hash_distribution("fnvla",fnv1a_perf);
+    // hash_distribution("fnvl",fnv1_perf);
+    // hash_distribution("murmur3",murmurhash3);
+    // hash_distribution("murmur2",MurmurHash2);
+    // hash_distribution("crc32",crc_perf);
     
-    // timeit ("haraka256",haraka256,32,32);
+    timeit ("haraka256",haraka256,32,32);
 
-    // timeit ("crc32",crc_perf_time,4,4);
-    // timeit ("murmur2",mm2_perf_time,4,4);
-    // timeit ("murmur3",mm3_perf_time,4,4);
-    // timeit ("djb2",djb2_perf_time,4,4);
-    // timeit ("djb2a",djb2a_perf_time,4,4);
-    // timeit ("sdbm",sdbm_perf_time,4,4);
-    // timeit ("sdbma",sdbma_perf_time,4,4);
-    // timeit ("fnv1",fnv1_perf_time,4,4);
-    // timeit ("fnv1a",fnv1a_perf_time,4,4);
-    // timeit ("hsiphash",hsiphash_perf_time,12,4);
+    timeit ("crc32",crc_perf_time,4,4);
+    timeit ("murmur2",mm2_perf_time,4,4);
+    timeit ("murmur3",mm3_perf_time,4,4);
+    timeit ("djb2",djb2_perf_time,4,4);
+    timeit ("djb2a",djb2a_perf_time,4,4);
+    timeit ("sdbm",sdbm_perf_time,4,4);
+    timeit ("sdbma",sdbma_perf_time,4,4);
+    timeit ("fnv1",fnv1_perf_time,4,4);
+    timeit ("fnv1a",fnv1a_perf_time,4,4);
+    timeit ("hsiphash",hsiphash_perf_time,12,4);
+    timeit ("siphash24",siphash24_perf_time,12,4);
     //graph();
 
 }
