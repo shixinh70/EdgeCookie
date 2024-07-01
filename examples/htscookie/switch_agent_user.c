@@ -151,6 +151,35 @@ static uint32_t hsiphash(uint32_t src, uint32_t dst, uint16_t src_port, uint16_t
 	uint32_t hash = (v0^v1)^(v2^v3);
     return hash; 	
 }
+
+static uint32_t hsiphash_ip(uint32_t src, uint64_t key){
+	int key0 = (key >> 32);
+    int key1 = key & 0xffffffff;
+	//initialization 
+	int v0 = c0 ^ key0;
+	int v1 = c1 ^ key1;
+	int v2 = c2 ^ key0;
+	int v3 = c3 ^ key1; 
+	
+	//first message 
+	v3 = v3 ^ bpf_ntohl(src);
+	SIPROUND;
+	SIPROUND;
+	v0 = v0 ^ bpf_ntohl(src); 
+
+	//finalization
+	v2 = v2 ^ 0xFF; 
+	SIPROUND;
+	SIPROUND;
+	SIPROUND;
+	SIPROUND;
+
+	uint32_t hash = (v0^v1)^(v2^v3);
+    return hash;
+}
+
+
+
 static uint64_t MACstoi(unsigned char* str){
     int last = -1;
     unsigned char a[6];
@@ -216,6 +245,14 @@ static __always_inline __u16 get_map_cookie_fnv(__u32 ipaddr){
     cookie_key = htonl(cookie_key);
 	return map_cookies[cookie_key >> 16];
 }
+
+static __always_inline __u16 get_map_cookie_sip(__u32 ipaddr){
+	uint16_t seed_key = ipaddr & 0xffff;
+	__u32 cookie_key = hsiphash_ip(ipaddr,map_seeds[seed_key]);
+    cookie_key = (cookie_key >> 16) ^ (cookie_key & 0xffff);
+	return cookie_key;
+}
+
 static void init_global_maps(){
 	for(int i=0;i<65536;i++){
 		map_cookies[i] = i;
@@ -420,7 +457,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			/*  Other ack packet, validate map_cookie    */
 			else{
 				uint32_t hybrid_cookie = ntohl(ts->tsecr);
-				if(((hybrid_cookie & 0xffff) == get_map_cookie_fnv(ip->saddr))){
+				if(((hybrid_cookie & 0xffff) == get_map_cookie_sip(ip->saddr))){
 					// printf("Switch agent: Pass map_cookie, map cookie = %u, cal_map_cookie = %u\n"
 					// 															,hybrid_cookie & 0xffff
 					// 															,get_map_cookie_fnv(ip->saddr) );

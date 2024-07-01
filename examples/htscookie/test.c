@@ -430,9 +430,53 @@ void graph(){
         printf("%d ",h);
     }
 }
+#define N 10
+void test(){
+    uint64_t target = 0x1234;
+    uint64_t ips[N] = {0};
 
+    for(int i=0;i<N;i++){
+        ips[i] = i;
+    }
+
+    uint64_t salt = rand() & 0xffffffff;
+    uint8_t buffer[32] = {0};
+    uint64_t target_and_salt = (target << 32) | salt;
+    memcpy(&buffer,&target_and_salt,8);
+    uint32_t ret;
+    haraka256((uint8_t*)&ret,(uint8_t*)&buffer,4,4);
+    ret = (ret>>16)^(ret&0xffff);
+    
+
+    for(uint64_t r_salt = 0; r_salt < UINT32_MAX;r_salt++){
+        uint32_t tmp = 0;
+        uint64_t target_and_salt_r = (target << 32) | r_salt;
+        memcpy(&buffer,&target_and_salt_r,8);
+        haraka256((uint8_t*)&tmp,(uint8_t*)&buffer,4,4);
+        tmp = (tmp>>16)^(tmp&0xffff);
+        if(tmp == ret){
+            //printf("bingo!\n");
+            
+            int c = 0;
+            for(int i = 0 ;i<N;i++){
+                uint32_t tmp1 = 0;
+                uint64_t new_target_and_salt = (ips[i] << 32) | r_salt;
+                memcpy(&buffer,&new_target_and_salt,8);
+                haraka256((uint8_t*)&tmp1,(uint8_t*)&buffer,4,4);
+                tmp1 = (tmp1>>16)^(tmp1&0xffff);
+                //printf("%d %d\n",tmp1,ret);
+                if(tmp1==ret){
+                    printf("bingo! c=%d i=%d salt = %ld salt_r = %ld\n",++c,i,salt,r_salt);
+                }
+            }
+        }
+
+    }
+}
 int main(){
 	load_constants();
+    test();
+    // test();
     // hash_distribution("djb2",djb2_perf);
     // hash_distribution("djb2a",djb2a_perf);
     // hash_distribution("sdbm",sdbm_perf);
@@ -443,19 +487,19 @@ int main(){
     // hash_distribution("murmur2",MurmurHash2);
     // hash_distribution("crc32",crc_perf);
     
-    timeit ("haraka256",haraka256,32,32);
+    // timeit ("haraka256",haraka256,32,32);
 
-    timeit ("crc32",crc_perf_time,4,4);
-    timeit ("murmur2",mm2_perf_time,4,4);
-    timeit ("murmur3",mm3_perf_time,4,4);
-    timeit ("djb2",djb2_perf_time,4,4);
-    timeit ("djb2a",djb2a_perf_time,4,4);
-    timeit ("sdbm",sdbm_perf_time,4,4);
-    timeit ("sdbma",sdbma_perf_time,4,4);
-    timeit ("fnv1",fnv1_perf_time,4,4);
-    timeit ("fnv1a",fnv1a_perf_time,4,4);
-    timeit ("hsiphash",hsiphash_perf_time,12,4);
-    timeit ("siphash24",siphash24_perf_time,12,4);
+    // timeit ("crc32",crc_perf_time,4,4);
+    // timeit ("murmur2",mm2_perf_time,4,4);
+    // timeit ("murmur3",mm3_perf_time,4,4);
+    // timeit ("djb2",djb2_perf_time,4,4);
+    // timeit ("djb2a",djb2a_perf_time,4,4);
+    // timeit ("sdbm",sdbm_perf_time,4,4);
+    // timeit ("sdbma",sdbma_perf_time,4,4);
+    // timeit ("fnv1",fnv1_perf_time,4,4);
+    // timeit ("fnv1a",fnv1a_perf_time,4,4);
+    // timeit ("hsiphash",hsiphash_perf_time,12,4);
+    // timeit ("siphash24",siphash24_perf_time,12,4);
     //graph();
 
 }

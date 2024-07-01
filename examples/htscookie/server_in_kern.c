@@ -28,34 +28,49 @@ struct {
         __uint(pinning, LIBBPF_PIN_BY_NAME);
 } rtt_map SEC(".maps");
 
-static __always_inline __u16 fnv_32_buf(const void *buf, size_t len, uint32_t seed)
-{
-    __u32 hval = seed;//FNV1_32_INIT;
-    unsigned char *bp = (unsigned char *)buf;	/* start of buffer */
-    unsigned char *be = bp + len;		/* beyond end of buffer */
 
-    /*
-     * FNV-1 hash each octet in the buffer
-     */
-    while (bp < be) {
-
-	/* multiply by the 32 bit FNV magic prime mod 2^32 */
-#if defined(NO_FNV_GCC_OPTIMIZATION)
-	hval *= FNV_32_PRIME;
-#else
-	hval += (hval<<1) + (hval<<4) + (hval<<7) + (hval<<8) + (hval<<24);
-#endif
-
-	/* xor the bottom with the current octet */
-	    hval ^= (__u32)*bp++;
-    }
-
-    /* return our new hash value */
-    //bpf_printk ("hval>>16 =  %d",hval >> 16);
-    hval = bpf_htonl (hval);
-    return (hval >> 16);
+static inline uint32_t rol(uint32_t word, uint32_t shift){
+	return (word<<shift) | (word >> (32 - shift));
 }
+#define SIPROUND \
+	do { \
+	v0 += v1; v2 += v3; v1 = rol(v1, 5); v3 = rol(v3,8); \
+	v1 ^= v0; v3 ^= v2; v0 = rol(v0, 16); \
+	v2 += v1; v0 += v3; v1 = rol(v1, 13); v3 = rol(v3, 7); \
+	v1 ^= v2; v3 ^= v0; v2 = rol(v2, 16); \
+	} while (0)
 
+static const int c0 = 0x70736575;
+static const int c1 = 0x6e646f6d;
+static const int c2 = 0x6e657261;
+static const int c3 = 0x79746573;
+
+
+static uint32_t hsiphash(uint32_t src, uint64_t key){
+	int key0 = (key >> 32);
+    int key1 = key & 0xffffffff;
+	//initialization 
+	int v0 = c0 ^ key0;
+	int v1 = c1 ^ key1;
+	int v2 = c2 ^ key0;
+	int v3 = c3 ^ key1; 
+	
+	//first message 
+	v3 = v3 ^ bpf_ntohl(src);
+	SIPROUND;
+	SIPROUND;
+	v0 = v0 ^ bpf_ntohl(src); 
+
+	//finalization
+	v2 = v2 ^ 0xFF; 
+	SIPROUND;
+	SIPROUND;
+	SIPROUND;
+	SIPROUND;
+
+	uint32_t hash = (v0^v1)^(v2^v3);
+    return hash;
+}
 
 static __always_inline __u16 get_hash_cookie(__u32 hash_cookie){
 	return (hash_cookie >> 16) ^ (hash_cookie & 0xffff);
@@ -64,15 +79,13 @@ static __always_inline __u16 get_hash_cookie(__u32 hash_cookie){
 static __always_inline __u16 get_cookie_key(__u32 ipaddr){
 
 	uint16_t seed_key = ipaddr & 0xffff;
-    __u32 le_ip = bpf_ntohl(ipaddr);
-	__u16 cookie_key = fnv_32_buf(&le_ip,4,map_seeds[seed_key]);
+	__u32 cookie_key = hsiphash(ipaddr,map_seeds[seed_key]);
+    cookie_key = (cookie_key >> 16) ^ (cookie_key & 0xffff);
     return cookie_key;
 }
 
 static __always_inline __u16 get_map_cookie(__u32 ipaddr){
-
-	__u16 cookie_key = get_cookie_key(ipaddr);
-	return map_cookies[cookie_key];
+	return get_cookie_key(ipaddr);
 }
 
 static __always_inline __u16 set_map_cookie(__u32 ipaddr, __u16 new_cookie){
