@@ -31,6 +31,8 @@ XSKNF_TARGET := $(XSKNF_DIR)/libxsknf.a
 EXAMPLES := htscookie/switch_agent		\
 			htscookie/server_in			\
 			htscookie/server_en			\
+			htscookie/client_in			\
+			htscookie/client_en			\
 			smartcookie/switch_agent 	\
 			smartcookie/server_in		\
 			smartcookie/server_en		\
@@ -106,7 +108,7 @@ $(XSKNF_O): $(XSKNF_C) $(XSKNF_H) $(OBJECT_LIBXDP) $(OBJECT_LIBBPF)
 $(XSKNF_TARGET): $(XSKNF_O)
 	$(AR) r -o $@ $(XSKNF_O)
 
-$(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF) ./examples/htscookie/server.h ./examples/smartcookie/server.h
+$(EXAMPLES_KERN): %_kern.o: %_kern.c %.h $(OBJECT_LIBBPF) ./examples/htscookie/server.h ./examples/smartcookie/server.h 
 	$(CLANG) -S \
 		-target bpf \
 		-Wall \

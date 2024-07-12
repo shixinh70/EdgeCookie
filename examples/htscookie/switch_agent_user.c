@@ -415,7 +415,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 
             /*  If timestamp == TS_START, validate syncookie  */
 			uint32_t hashcookie = 0;
-			if (ts->tsecr == TS_START){
+			if (ts->tsecr == TS_START && !(tcp->syn)){
 				if(hash_option == HARAKA)
 					haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
 				
@@ -493,11 +493,15 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			}
 			return forward(eth,ip);
 		}
-	}
+
+    }
 
 	/*  Outbound packet */
 	else{
-        
+        		// printf("Switch agent: Fail map_cookie, map cookie = %u, cal_map_cookie = %u\n"
+					// 															,hybrid_cookie & 0xffff
+					// 															,get_map_cookie_fnv(ip->saddr) );
+
         /*  Seed change packet tag by ECE, and change
             1. Seeds for Fnv() of the crack IP.
             2. cookies mapped by the crack IP.  */
@@ -512,6 +516,31 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			map_cookies[cookie_key] = new_cookie;
 			return -1;
 		}
+
+        /*  Outbound SYN*/
+        if(tcp->syn && (!tcp->ack)){
+            /*  Parse timestamp */
+			struct tcp_opt_ts* ts;
+			int opt_ts_offset = parse_timestamp(tcp); 
+			if(opt_ts_offset < 0) return -1;
+			ts = (tcp_opt + opt_ts_offset);
+			if((void*)(ts + 1) > pkt_end){
+				return -1;
+			}
+			uint32_t hashcookie = 0;
+            uint32_t fastcookie = 0;
+            uint32_t hybrid_cookie = 0;
+            haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
+            hashcookie = (hashcookie >> 16) ^ (hashcookie & 0xffff);
+            fastcookie = get_map_cookie(ip->daddr);
+            hybrid_cookie = hashcookie << 16 | fastcookie;
+            uint32_t old_ts_val = ts->tsval;
+            ts->tsval = hybrid_cookie;
+            __u32 tcp_csum = ~csum_unfold(tcp->check);
+            tcp_csum = csum_add(tcp_csum, ~old_ts_val);
+            tcp_csum = csum_add(tcp_csum, ts->tsval);
+            ts->tsval = ~csum_fold(tcp_csum);
+        }
 	}
 	// Other Pass through Router
 	return forward(eth,ip);
