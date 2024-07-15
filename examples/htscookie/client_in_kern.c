@@ -59,10 +59,10 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                     int opt_ts_offset = parse_timestamp(&cur,tcp,data_end,&ts);
                     if(opt_ts_offset == -1) return XDP_DROP;
                     struct map_key_t key = {
-                            .src_ip = ip->daddr,
-                            .dst_ip = ip->saddr,
-                            .src_port = tcp->dest,
-                            .dst_port = tcp->source
+                            .src_ip = ip->saddr,
+                            .dst_ip = ip->daddr,
+                            .src_port = tcp->source,
+                            .dst_port = tcp->dest
                         };
                     
                     struct map_val_t val ;
@@ -76,9 +76,9 @@ SEC("prog") int xdp_router(struct xdp_md *ctx) {
                             return XDP_DROP;
                         }
 
-                    uint32_t new_tsecr = ts->tsecr;
-                    val.hybrid_cookie = new_tsecr;
+                    uint32_t new_tsecr = val.ts_val_s;
                     uint32_t old_tsecr = ts->tsecr;
+                    val.hybrid_cookie = ts->tsecr;
                     ts->tsecr = val.ts_val_s;
                     bpf_map_update_elem(&conntrack_map, &key, &val, BPF_EXIST);
 

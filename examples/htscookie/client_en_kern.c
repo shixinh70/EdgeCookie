@@ -69,8 +69,8 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                         .src_port = tcp->dest,
                         .dst_port = tcp->source
                     };
-                    struct map_val_t val;
-                    val.ts_val_s = ts->tsval;
+                    struct map_val_t val = {.ts_val_s = ts->tsval};
+                    
                     bpf_map_update_elem(&conntrack_map,&key,&val,BPF_ANY);
                 }
                 else{
@@ -94,13 +94,13 @@ SEC("prog") int xdp_router(struct __sk_buff *skb) {
                         DEBUG_PRINT ("TC: Read map_val fail!\n");
                         return TC_ACT_SHOT;
                     }
-                    uint32_t old_tsval = val.ts_val_s;
-                    uint32_t new_tsval = val.hybrid_cookie;
+                    // uint32_t old_tsval = val.ts_val_s;
+                    // uint32_t new_tsval = val.hybrid_cookie;
                     val.ts_val_s = ts->tsval;
                     ts->tsval = val.hybrid_cookie;
-                    uint64_t tcp_csum = tcp->check;
-                    tcp_csum = bpf_csum_diff(&old_tsval, 4, &new_tsval, 4, ~tcp_csum);
-                    tcp->check = csum_fold_helper_64(tcp_csum);
+                    // uint64_t tcp_csum = tcp->check;
+                    // tcp_csum = bpf_csum_diff(&old_tsval, 4, &new_tsval, 4, ~tcp_csum);
+                    // tcp->check = csum_fold_helper_64(tcp_csum);
                 }
             }
 

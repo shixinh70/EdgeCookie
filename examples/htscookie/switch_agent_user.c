@@ -532,10 +532,10 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
             uint32_t hybrid_cookie = 0;
             haraka256((uint8_t*)&hashcookie, (uint8_t*)&flows[worker_id], 4 , 32);
             hashcookie = (hashcookie >> 16) ^ (hashcookie & 0xffff);
-            fastcookie = get_map_cookie(ip->daddr);
+            fastcookie = get_map_cookie_sip(ip->daddr);
             hybrid_cookie = hashcookie << 16 | fastcookie;
             uint32_t old_ts_val = ts->tsval;
-            ts->tsval = hybrid_cookie;
+            ts->tsval = bpf_htonl(hybrid_cookie);
             __u32 tcp_csum = ~csum_unfold(tcp->check);
             tcp_csum = csum_add(tcp_csum, ~old_ts_val);
             tcp_csum = csum_add(tcp_csum, ts->tsval);
