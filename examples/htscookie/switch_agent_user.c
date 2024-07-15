@@ -539,7 +539,7 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
             __u32 tcp_csum = ~csum_unfold(tcp->check);
             tcp_csum = csum_add(tcp_csum, ~old_ts_val);
             tcp_csum = csum_add(tcp_csum, ts->tsval);
-            ts->tsval = ~csum_fold(tcp_csum);
+            tcp->check = ~csum_fold(tcp_csum);
         }
 	}
 	// Other Pass through Router
