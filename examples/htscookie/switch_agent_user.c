@@ -375,10 +375,10 @@ int xsknf_packet_processor(void *pkt, unsigned *len, unsigned ingress_ifindex, u
 			if(tcpcsum_option == CSUM_ON){
                 if(opt_ab_test){
                     __u32 tcp_csum = ~csum_unfold(tcp->check);
-                    tcp_csum = csum_add(tcp_csum,~rx_tsval);
+                    // tcp_csum = csum_add(tcp_csum,~rx_tsval);
                     tcp_csum = csum_add(tcp_csum,TS_START);
                     tcp_csum = csum_add(tcp_csum,~rx_tsecr);
-                    tcp_csum = csum_add(tcp_csum,ts->tsecr);
+                    // tcp_csum = csum_add(tcp_csum,ts->tsecr);
                     tcp_csum = csum_add(tcp_csum,~rx_seq);
                     tcp_csum = csum_add(tcp_csum,hashcookie);
                     tcp_csum = csum_add(tcp_csum,~rx_ack);

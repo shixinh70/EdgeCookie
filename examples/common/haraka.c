@@ -138,7 +138,7 @@ void haraka256(unsigned char *out, const unsigned char *in, int inlen, int outle
   // STORE(out + 16, s[1]);
   s[0] = _mm_xor_si128(s[0],s[1]); // xor 256 to 128;
   uint64_t tmp64 = _mm_extract_epi64(s[0], 0) ^ _mm_extract_epi64(s[0], 1);
-  uint32_t tmp32 = (tmp64 >> 32) ^ (tmp64 & 0xffff); 
+  uint32_t tmp32 = (tmp64 >> 32) ^ (tmp64 & 0xffffffff); 
   
   //uint64_t second64 = _mm_extract_epi64(s[0], 1);
   // first64 ^= second64;

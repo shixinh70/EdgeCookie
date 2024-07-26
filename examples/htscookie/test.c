@@ -558,10 +558,15 @@ int main(){
     timeit ("sdbma",sdbma_perf_time,4,4);
     timeit ("fnv1",fnv1_perf_time,4,4);
     timeit ("fnv1a",fnv1a_perf_time,4,4);
-    timeit ("hsiphash",hsiphash_perf_time,12,4);
-    timeit ("hsiphash13",hsiphash13_perf_time,12,4);
+    timeit ("hsiphash_4byte",hsiphash_perf_time,4,4);
+    timeit ("siphash24_4byte",siphash24_perf_time,4,4);
+    timeit ("hsiphash13_4byte",hsiphash13_perf_time,4,4);
 
-    timeit ("siphash24",siphash24_perf_time,12,4);
+    timeit ("hsiphash_12byte",hsiphash_perf_time,12,4);
+    timeit ("siphash24_12byte",siphash24_perf_time,12,4);
+
+    timeit ("hsiphash13_12byte",hsiphash13_perf_time,12,4);
+
     //graph();
 
 }
