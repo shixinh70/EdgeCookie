@@ -10,7 +10,7 @@ For all ACK packets sent by the server, the server agent inserts a special hybri
 
 # The router agent typically build on [XSNKF library](https://github.com/FedeParola/xsknf)
 
-## XSKNF - Speed up development of AF_XDP-based NFs (Moving from [XSNKF](https://github.com/FedeParola/xsknf))
+## XSKNF - Speed up development of AF_XDP-based NFs (Modified from [XSNKF](https://github.com/FedeParola/xsknf))
 
 The XSKNF library speeds up the development of AF_XDP based network functions taking care of all aspects related to AF_XDP buffers and rings management and threading aspects.
 The programmer just has to write a packet processing function that receives a single packet in input, processes it and provides a verdict.
@@ -24,13 +24,9 @@ The **libelf**, **libz**, and **libmnl** libraries are required and can be insta
 sudo apt install libelf-dev zlib1g-dev libmnl-dev
 ```
 
-Run `make` in the main project folder to build the library under [./src](https://github.com/FedeParola/xsknf/tree/master/src) and the examples under [./examples](https://github.com/FedeParola/xsknf/tree/master/examples).
+Run `make` in the main project folder to build the library under [./src](https://github.com/FedeParola/xsknf/tree/master/src)
 
 ### Application setup
-
-To process packets in user space through AF_XDP sockets you just need to include the XSKNF library in yout program and implement the `xsknf_packet_processor()` function.
-This function receives as parameters a pointer to the packet buffer, the length of the packet and the index of the ingress interface and must return the index of the output interface or `-1` to drop the packet.
-Interface indexes reflect the order in which interfaces are passed on the command line (starting from `0`).
 
 A typical application based on XSKNF can be called with a set of XSKNF-specific arguments, followed by a double hypen (`--`), followed by a set of application-specific arguments (in a similar way to how DPDK applications are invoked).
 The following arguments are currently supported by the library:
