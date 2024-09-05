@@ -11,7 +11,7 @@ netperf curl wget mtr msr-tools -y
 
 ### Server (C220g5 with ubuntu 20.04)
 #### 1. Dependency
-```bash=
+```bash
 apt update && apt install apache2 tcpdump netperf linux-tools-common curl wget \
 linux-cloud-tools-$(uname -r) clang llvm libelf-dev libpcap-dev build-essential \
 libc6-dev-i386 linux-tools-$(uname -r) linux-headers-$(uname -r) linux-tools-generic \
@@ -20,7 +20,7 @@ m4 zlib1g-dev libmnl-dev msr-tools -y
 
 #### 2. TC hook rediect IF setup, and XDP mode setup
 Modify the ./EdgeCookie/examples/address.h
-```cpp=
+```cpp
 /* If XDP running in Native(Driver) mode, then set XDP_DRV to 1.
    Use command "ip -a" to find the ID of Server's Interface (for experience).
    Set the SERVER_IF to the ID    */
@@ -30,12 +30,12 @@ Modify the ./EdgeCookie/examples/address.h
 ```
 
 #### 3. Build
-```bash=
+```bash
 make
 ```
 
 #### 4. Usage
-```basb=
+```basb
 ## Unload XDP and TC
 ./EdgeCookie/examples/htscookie/link.sh <Interfcae> 0
 ## Load XDP and TC
@@ -44,13 +44,13 @@ make
 ```
 
 ##### 5. Modify apache2's index size
-```bash=
+```bash
 truncate -s <size_bytes> /var/www/html/index.html
 ```
 
 ### Switch agnet(C220g2 ubuntu20.04)
 #### 1. Dependency
-```bash=
+```bash
 sudo apt update && \
 sudo apt install clang llvm libelf-dev libpcap-dev \
 build-essential libc6-dev-i386 linux-tools-$(uname -r) \
@@ -59,7 +59,7 @@ tcpdump m4 libelf-dev zlib1g-dev libmnl-dev msr-tools -y
 ```
 
 #### 2. NIC Setup
-```bash=
+```bash
 ## set multi-queue to 1
 ./script/switch/setup_interface <interface>
 ## enable busypolling
@@ -70,7 +70,7 @@ tcpdump m4 libelf-dev zlib1g-dev libmnl-dev msr-tools -y
 
 #### 3. MAC Address Setup
 Modify the ./EdgeCookie/examples/address.h
-```cpp=
+```c
 /*   Fill in the Client, Server, Attacker IF's MAC.
      And the pair interface on the switch    */
 ...
@@ -89,19 +89,19 @@ Modify the ./EdgeCookie/examples/address.h
 #define SERVER_R_IF_ORDER 1
 ```
 #### 4. Build
-```bash=
+```bash
 make
 ```
 
 ### Adversary (c220g5 with ubuntu 18.04)
 #### 1. Dependency
 
-```bash=
+```bash
 apt update && apt-get install -y build-essential cmake \
 linux-headers-$(uname -r) pciutils libnuma-dev libtbb-dev
 ```
 #### 2. Build Moongen
-```bash=
+```bash
 git clone https://github.com/emmericp/MoonGen.git \
 && ip addr flush dev $(ip addr show | grep "inet 10.18.0.4" | awk '{print $NF}') \
 && cd ./MoonGen \
@@ -110,13 +110,13 @@ git clone https://github.com/emmericp/MoonGen.git \
 && ./libmoon/deps/dpdk/usertools/dpdk-devbind.py --status
 ```
 #### 3. Clone EdgeCookie (Copy out gen-traffic.lua)
-```bash=
+```bash
 git clone https://github.com/shixinh70/EdgeCookie.git \
 && cp ./EdgeCookie/script/attacker/gen-traffic.lua ./
 ```
 #### 4. Modify gen-traffic.lua file
 
-```cpp=
+```cpp
 // ETH_SRC should be adversary's IF MAC
 // ETH_DST should be the pair IF on the switch agent
 
@@ -124,7 +124,7 @@ local ETH_SRC = "3c:fd:fe:b4:fb:2c"
 local ETH_DST = "90:e2:ba:b3:75:c0"
 ```
 #### 5. Moongen Usage
-```cpp=
+```cpp
 // Working directory = "./Moongen"
 ./build/Moongen ../gen-traffic.lua <IF_TX> <IF_RX> [options]
 ```
@@ -133,11 +133,11 @@ local ETH_DST = "90:e2:ba:b3:75:c0"
 
 #### 1. CPU setup
 ##### Turn off C-state, turbo boost and fix CPU frequency
-```bash=
+```bash
 ./script/fix_irq.sh
 ```
 ##### Turn off hyper-threading
-```bash=
+```bash
 echo off | sudo tee /sys/devices/system/cpu/smt/control
 ```
 #### 2. Manual ARP setup 
@@ -145,7 +145,7 @@ echo off | sudo tee /sys/devices/system/cpu/smt/control
 ![TOPO](https://hackmd.io/_uploads/S1d-N3InR.jpg)
 
 
-```bash=
+```bash
 ## Example
 ## In Client
 arp -s <IP_CS> <MAC_CS>
@@ -158,7 +158,7 @@ arp -s <IP_SS> <MAC_SS>
 # Experiment Related
 ## Suggest setup
 ### 1. Combind all the interface's queue to 1, including server and client.
-```bash=
+```bash
 ethtool -L <interface> combined 1
 ```
 ### 2. Do not fix the CPU frequency of switch_agent for better performace, but fix the server and client's.
@@ -166,7 +166,7 @@ ethtool -L <interface> combined 1
 ### 3. Do not fix the CPU frequency of server when observing the MIPS. 
 ## Effectiveness of EdgeCookie
 ### 1. Adversary: Launch DDoS attack by Moongen
-```bash=
+```bash
 ## Example
 ## syn flood at 1Mpps rates with random src IP.
 ## Warning: The src IP's first 8bit should be the experiment
@@ -176,7 +176,7 @@ ethtool -L <interface> combined 1
 ```
 ### 2. Switch agent: Running EdgeCookie/SmartCookie switch_agent
 
-```bash=
+```bash
 ## Example
 ## Running EdgeCookie with busypoll mode,
 ## and with apache2's TCP options
@@ -189,7 +189,7 @@ ethtool -L <interface> combined 1
 
 ```
 ### 3. Server: Caculate (M)IPS of every cores
-```bash=
+```bash
 ## Get all the total instructions of all cores for 10 sec
 perf stat -e instructions -a sleep 10
 ```
@@ -202,7 +202,7 @@ perf stat -e instructions -a sleep 10
 ### 1. Adversary: Launch DDoS attack by Moongen
 ### 2. Switch agent: Running EdgeCookie/SmartCookie switch_agent
 ### 3. Client: Use curl tools to collect the Latency
-```bash=
+```bash
 ## Run the script to get the latency
 ## curl server for N request and output the Avg Latency.
 ./EdgeCookie/script/client/curl_time.sh <N>
@@ -213,7 +213,7 @@ perf stat -e instructions -a sleep 10
 ### 2. Server: Adjust the apache2 index size.
 ### 3. Client: Use curl tools to collect the Latency.
 ### 3.1 Client: Get the composition of latency
-```bash=
+```bash
 ## curl server for N request and parse the Latency
 ./EdgeCookie/script/client/parse_time.sh <N>
 ```
