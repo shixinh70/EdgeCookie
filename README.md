@@ -1,27 +1,16 @@
-# EdgeCookie - A solution to mitigate SYN flood and ACK flood attacks by leveraging eBPF
+# Building 實驗環境
+## CloudLab拓樸圖
+![Topo](https://hackmd.io/_uploads/ryKjbjIn0.jpg)
 
-TCP SYN flood is a famous DDoS attack that exploits the creation of numerous half-opened connections to exhaust resources of a server. Researchers are still actively working on resolving this issue. ACK flood, on the other hand, utilizes a large number of ACK packets carrying data to flood the server's network, causing service disruption for regular users. However, ACK flood attacks are less common compared to SYN flood attacks because they are limited by the TCP three-way handshake mechanism and cannot effectively amplify traffic like UDP reflection attacks. Therefore, it is difficult to saturate the line with ACK flood attacks. However, in 2021, Kevin Bock and others discovered vulnerabilities in many middleboxes in the network that could be exploited for reflective ACK flood attacks, with astonishing amplification factors. This makes this new type of ACK flood attack an increasingly significant threat.
-
-To address both SYN flood and ACK flood attacks, we propose an architecture that utilizes eBPF programs running on both the border gateway and the server, which are gateway agent and server agent, to verify and tag the traffic flow. The goal is to promptly filter out attack traffic to avoid impacting other legitimate users on the network.
-
-When a client wants to establish a connection with the protected server, the gateway agent acts as a SYN proxy, employing SYN cookie mechanisms to perform initial client validation. If the client is deemed legitimate, the connection is forwarded to the server agent. Then the server agent establishes a connection with the server behind it, ultimately synchronizing the two independent connections.
-
-For all ACK packets sent by the server, the server agent inserts a special hybrid cookie into the TCP timestamp value field. Due to TCP protocol specifications, when the receiver needs to reply to packets carrying TCP timestamp values, it must place the timestamp value in the timestamp echo field of the response packet. Therefore, the gateway agent can verify the timestamp echo field of ACK packets to determine whether both end-host have completed the connection establishment process, enabling packet filtering without the need to store any TCP states.
-
-# The router agent typically build on [XSNKF library](https:##github.com/FedeParola/xsknf)
-
-# Building
-## Experiment TOPO
-![Topo](https:##github.com/user-attachments/assets/957e2285-97b1-4d12-a157-01b969a799c0)
-### Client (C220g5 with ubuntu 20.04)
-#### Dependency
+### Client (C220g51 with ubuntu 20.04)
+#### 1. Dependency
 ```
 apt update && apt install apache2-utils tcpdump \
 netperf curl wget mtr msr-tools -y
 ```
 
 ### Server (C220g5 with ubuntu 20.04)
-#### Dependency
+#### 1. Dependency
 ```
 apt update && apt install apache2 tcpdump netperf linux-tools-common curl wget \
 linux-cloud-tools-$(uname -r) clang llvm libelf-dev libpcap-dev build-essential \
@@ -29,7 +18,7 @@ libc6-dev-i386 linux-tools-$(uname -r) linux-headers-$(uname -r) linux-tools-gen
 m4 zlib1g-dev libmnl-dev msr-tools -y
 ```
 
-#### TC hook rediect IF setup, and XDP mode setup
+#### 2. TC hook rediect IF setup, and XDP mode setup
 Modify the ./EdgeCookie/examples/address.h
 ```cpp=
 /* If XDP running in Native(Driver) mode, then set XDP_DRV to 1.
@@ -40,12 +29,12 @@ Modify the ./EdgeCookie/examples/address.h
 #define SERVER_IF 2
 ```
 
-#### Build
+#### 3. Build
 ```bash=
 make
 ```
 
-#### Usage
+#### 4. Usage
 ```basb=
 ## Unload XDP and TC
 ./EdgeCookie/examples/htscookie/link.sh <Interfcae> 0
@@ -54,13 +43,13 @@ make
 ## Set SmartCookie's Bloomfilter flow number
 ```
 
-##### Modify apache2's index size
+##### 5. Modify apache2's index size
 ```bash=
 truncate -s <size_bytes> /var/www/html/index.html
 ```
 
 ### Switch agnet(C220g2 ubuntu20.04)
-#### Dependency
+#### 1. Dependency
 ```bash=
 sudo apt update && \
 sudo apt install clang llvm libelf-dev libpcap-dev \
@@ -69,7 +58,7 @@ linux-headers-$(uname -r) linux-tools-common linux-tools-generic \
 tcpdump m4 libelf-dev zlib1g-dev libmnl-dev msr-tools -y
 ```
 
-#### NIC Setup
+#### 2. NIC Setup
 ```bash=
 ## set multi-queue to 1
 ./script/switch/setup_interface <interface>
@@ -79,7 +68,7 @@ tcpdump m4 libelf-dev zlib1g-dev libmnl-dev msr-tools -y
 
 
 
-#### MAC Address Setup
+#### 3. MAC Address Setup
 Modify the ./EdgeCookie/examples/address.h
 ```cpp=
 /*   Fill in the Client, Server, Attacker IF's MAC.
@@ -99,50 +88,50 @@ Modify the ./EdgeCookie/examples/address.h
 #define CLIENT_R_IF_ORDER 0
 #define SERVER_R_IF_ORDER 1
 ```
-#### Build
+#### 4. Build
 ```bash=
 make
 ```
 
 ### Adversary (c220g5 with ubuntu 18.04)
-#### Dependency
+#### 1. Dependency
 
 ```bash=
 apt update && apt-get install -y build-essential cmake \
 linux-headers-$(uname -r) pciutils libnuma-dev libtbb-dev
 ```
-#### Build Moongen
+#### 2. Build Moongen
 ```bash=
-git clone https:##github.com/emmericp/MoonGen.git \
+git clone https://github.com/emmericp/MoonGen.git \
 && ip addr flush dev $(ip addr show | grep "inet 10.18.0.4" | awk '{print $NF}') \
 && cd ./MoonGen \
 && ./build.sh \
 && ./setup-hugetlbfs.sh \
 && ./libmoon/deps/dpdk/usertools/dpdk-devbind.py --status
 ```
-#### Clone EdgeCookie (Copy out gen-traffic.lua)
+#### 3. Clone EdgeCookie (Copy out gen-traffic.lua)
 ```bash=
-git clone https:##github.com/shixinh70/EdgeCookie.git \
+git clone https://github.com/shixinh70/EdgeCookie.git \
 && cp ./EdgeCookie/script/attacker/gen-traffic.lua ./
 ```
-#### Modify gen-traffic.lua file
+#### 4. Modify gen-traffic.lua file
 
 ```cpp=
-## ETH_SRC should be adversary's IF MAC
-## ETH_DST should be the pair IF on the switch agent
+// ETH_SRC should be adversary's IF MAC
+// ETH_DST should be the pair IF on the switch agent
 
 local ETH_SRC = "3c:fd:fe:b4:fb:2c"
 local ETH_DST = "90:e2:ba:b3:75:c0"
 ```
-#### Moongen Usage
+#### 5. Moongen Usage
 ```cpp=
-## Working directory = "./Moongen"
+// Working directory = "./Moongen"
 ./build/Moongen ../gen-traffic.lua <IF_TX> <IF_RX> [options]
 ```
 
 ### Common setup
 
-#### CPU setup
+#### 1. CPU setup
 ##### Turn off C-state, turbo boost and fix CPU frequency
 ```bash=
 ./script/fix_irq.sh
@@ -151,9 +140,10 @@ local ETH_DST = "90:e2:ba:b3:75:c0"
 ```bash=
 echo off | sudo tee /sys/devices/system/cpu/smt/control
 ```
-#### Manual ARP setup 
+#### 2. Manual ARP setup 
 **TOPO**
-![htscookie_light-第 35 页 (1)](https:##github.com/user-attachments/assets/d34b5f26-61c4-4ea3-8b00-64bd74384fd3)
+![TOPO](https://hackmd.io/_uploads/S1d-N3InR.jpg)
+
 
 ```bash=
 ## Example
