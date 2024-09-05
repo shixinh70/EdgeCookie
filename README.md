@@ -1,6 +1,6 @@
 # Building 實驗環境
 ## CloudLab拓樸圖
-![Topo](https://hackmd.io/_uploads/ryKjbjIn0.jpg)
+![Topo](https://github.com/user-attachments/assets/2e0683dd-bfbd-4506-90f0-11d2a30e8d80)
 
 ### Client (C220g51 with ubuntu 20.04)
 #### 1. Dependency
@@ -35,12 +35,12 @@ make
 ```
 
 #### 4. Usage
-```basb
+```bash
 ## Unload XDP and TC
 ./EdgeCookie/examples/htscookie/link.sh <Interfcae> 0
+
 ## Load XDP and TC
 ./EdgeCookie/examples/htscookie/link.sh <Interfcae> 1
-## Set SmartCookie's Bloomfilter flow number
 ```
 
 ##### 5. Modify apache2's index size
@@ -142,7 +142,7 @@ echo off | sudo tee /sys/devices/system/cpu/smt/control
 ```
 #### 2. Manual ARP setup 
 **TOPO**
-![TOPO](https://hackmd.io/_uploads/S1d-N3InR.jpg)
+![htscookie_light-第 35 页 (1)](https://github.com/user-attachments/assets/17384dbe-c59e-47f4-8f3f-8c2cb183e635)
 
 
 ```bash
