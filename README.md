@@ -8,11 +8,11 @@ When a client wants to establish a connection with the protected server, the gat
 
 For all ACK packets sent by the server, the server agent inserts a special hybrid cookie into the TCP timestamp value field. Due to TCP protocol specifications, when the receiver needs to reply to packets carrying TCP timestamp values, it must place the timestamp value in the timestamp echo field of the response packet. Therefore, the gateway agent can verify the timestamp echo field of ACK packets to determine whether both end-host have completed the connection establishment process, enabling packet filtering without the need to store any TCP states.
 
-# The router agent typically build on [XSNKF library](https://github.com/FedeParola/xsknf)
+# The router agent typically build on [XSNKF library](https:##github.com/FedeParola/xsknf)
 
 # Building
 ## Experiment TOPO
-![Topo](https://github.com/user-attachments/assets/957e2285-97b1-4d12-a157-01b969a799c0)
+![Topo](https:##github.com/user-attachments/assets/957e2285-97b1-4d12-a157-01b969a799c0)
 ### Client (C220g5 with ubuntu 20.04)
 #### Dependency
 ```
@@ -113,7 +113,7 @@ linux-headers-$(uname -r) pciutils libnuma-dev libtbb-dev
 ```
 #### Build Moongen
 ```bash=
-git clone https://github.com/emmericp/MoonGen.git \
+git clone https:##github.com/emmericp/MoonGen.git \
 && ip addr flush dev $(ip addr show | grep "inet 10.18.0.4" | awk '{print $NF}') \
 && cd ./MoonGen \
 && ./build.sh \
@@ -122,21 +122,21 @@ git clone https://github.com/emmericp/MoonGen.git \
 ```
 #### Clone EdgeCookie (Copy out gen-traffic.lua)
 ```bash=
-git clone https://github.com/shixinh70/EdgeCookie.git \
+git clone https:##github.com/shixinh70/EdgeCookie.git \
 && cp ./EdgeCookie/script/attacker/gen-traffic.lua ./
 ```
 #### Modify gen-traffic.lua file
 
 ```cpp=
-// ETH_SRC should be adversary's IF MAC
-// ETH_DST should be the pair IF on the switch agent
+## ETH_SRC should be adversary's IF MAC
+## ETH_DST should be the pair IF on the switch agent
 
 local ETH_SRC = "3c:fd:fe:b4:fb:2c"
 local ETH_DST = "90:e2:ba:b3:75:c0"
 ```
 #### Moongen Usage
 ```cpp=
-// Working directory = "./Moongen"
+## Working directory = "./Moongen"
 ./build/Moongen ../gen-traffic.lua <IF_TX> <IF_RX> [options]
 ```
 
@@ -153,7 +153,7 @@ echo off | sudo tee /sys/devices/system/cpu/smt/control
 ```
 #### Manual ARP setup 
 **TOPO**
-![htscookie_light-第 35 页 (1)](https://github.com/user-attachments/assets/d34b5f26-61c4-4ea3-8b00-64bd74384fd3)
+![htscookie_light-第 35 页 (1)](https:##github.com/user-attachments/assets/d34b5f26-61c4-4ea3-8b00-64bd74384fd3)
 
 ```bash=
 ## Example
