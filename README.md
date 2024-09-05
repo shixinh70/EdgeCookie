@@ -11,7 +11,7 @@ netperf curl wget mtr msr-tools -y
 
 ### Server (C220g5 with ubuntu 20.04)
 #### 1. Dependency
-```
+```bash=
 apt update && apt install apache2 tcpdump netperf linux-tools-common curl wget \
 linux-cloud-tools-$(uname -r) clang llvm libelf-dev libpcap-dev build-essential \
 libc6-dev-i386 linux-tools-$(uname -r) linux-headers-$(uname -r) linux-tools-generic \
